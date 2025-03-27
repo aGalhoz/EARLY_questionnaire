@@ -52,7 +52,7 @@ boxplot_binary(dat_final_subsubquestions_nonmotor,
 
 ## timeplot analysis of relevant Qs
 final_ALS_CTR_category_nonmotor_diff_i <- final_ALS_CTR_category_nonmotor_diff %>%
-  filter(`sub-subcategory` == "Häufige Stürze nach hinten")
+  filter(`sub-subcategory` == "Kalte, blasse oder bläulich verfärbte Extremitäten")
 dat_final_nonmotor_diff_i <- dat_final[,c(which(original_names %in% final_ALS_CTR_category_nonmotor_diff_i$`original question (ALS)`),ncol(dat_final))]
 
 dt_nonmotor_ALS <- as.data.frame(table(c(dat_final_nonmotor_diff_i[dat_final_nonmotor_diff_i$status2==1,1]))) %>% arrange(desc(Freq))
@@ -81,6 +81,7 @@ names(dt_nonmotor_CTR) <- c("Levels_en","Freq_CTR")
 
 dt_nonmotor_all_tmp <- merge(dt_nonmotor_ALS,
                          dt_nonmotor_CTR)
+dt_nonmotor_all_tmp$Variable_en <- rep("Cold extremities",4)
 dt_nonmotor_all_tmp$Variable_en <- rep("Trembling of arms or legs",4)
 dt_nonmotor_all_tmp$Variable_en <- rep("Excessive saliva",4)
 dt_nonmotor_all_tmp$Variable_en <- rep("Frequent falls backwards",3)
@@ -121,52 +122,6 @@ dat_final_subquestions_healthcare <- do.call("cbind", dat_final_subquestions_hea
   mutate(status = dat_final_healthcare_i[,"status"])
 
 barplot_continuous(dat_final_subquestions_healthcare)
-
-## timeplot analysis of relevant Qs
-final_ALS_CTR_category_healthcare_i <- final_ALS_CTR_category_healthcare %>%
-  filter(`sub-category` == "Logopädie")
-dat_final_healthcare_i <- data_patients_control_combined_all[,c(which(colnames(data_patients_control_combined_all) 
-                                                                      %in% final_ALS_CTR_category_healthcare_i$`original question (ALS)`),ncol(data_patients_control_combined_all))]
-
-dat_final_healthcare_i[,1:4] <- apply(dat_final_healthcare_i[,1:4], 2, as.numeric)
-dt_healthcare <- dat_final_healthcare_i %>%
-  dplyr::group_by(status) %>%
-  dplyr::summarise(across(everything(), ~ sum(., na.rm = TRUE)))
-dt_healthcare_amount_tmp <- apply(dat_final_healthcare_i[,1:4], 2, 
-                                  function(x) ifelse(x>0,1,0))
-dat_final_healthcare_i_tmp <- data.frame(cbind(dt_healthcare_amount_tmp,dat_final_healthcare_i$status))
-dt_healthcare_amount <- dat_final_healthcare_i_tmp %>%
-  dplyr::group_by(V5) %>%
-  dplyr::summarise(across(everything(), ~ sum(., na.rm = TRUE))) 
-
-dt_healthcare_ALS <- data.frame(Freq_ALS = t(dt_healthcare %>%
-                                               filter(status == 1) %>%
-                                               select(-status)),
-                                amount_ALS = t(dt_healthcare_amount %>%
-                                                 filter(V5 == 1) %>%
-                                                 select(-V5)))
-dt_healthcare_CTR <- data.frame(Freq_CTR = t(dt_healthcare %>%
-                                               filter(status == 0) %>%
-                                               select(-status)),
-                                amount_CTR = t(dt_healthcare_amount %>%
-                                                 filter(V5 == 0) %>%
-                                                 select(-V5)))
-dt_healthcare_all_tmp <- cbind(dt_healthcare_ALS,
-                               dt_healthcare_CTR)
-
-dt_healthcare_all_tmp$Levels_en <- c("1 year","5 years","10 years","1 month")
-dt_healthcare_all_tmp$Variable_en <- rep("Speech Therapy",4)
-dt_healthcare_all_tmp$Freq_ALS <- round((dt_healthcare_all_tmp$Freq_ALS * 100)/sum(dt_healthcare_all_tmp$Freq_ALS),digits=2)
-dt_healthcare_all_tmp$Freq_CTR <- round((dt_healthcare_all_tmp$Freq_CTR * 100)/sum(dt_healthcare_all_tmp$Freq_CTR),digits=2)
-
-dt_healthcare_all <- rbind(dt_healthcare_all,
-                           dt_healthcare_all_tmp)
-
-dt_healthcare_all$Levels_en <- factor(dt_healthcare_all$Levels_en,
-                                    levels = c("1 month","1 year","5 years","10 years"))
-
-
-barplot_categories_new(dt_healthcare_all)
 
 ###### -> Pre-existing conditions Qs
 
@@ -762,16 +717,16 @@ barplot_categories <- function(data){
                         round((tmp$value*100)/514, digits = 1),
                         round((tmp$value*100)/306,digits = 1))
     print(tmp)
-    tmp$Levels <- as.factor(tmp$Levels_en)
+    tmp$Levels <- factor(tmp$Levels_en,levels = c("10 years", "5 years","1 year","1 month"))
     plot_con[[i]] = ggplot(tmp, aes(x = Levels, y = counts, fill = Status)) + 
       geom_col(aes(color = Status, fill = Status),
                position = position_dodge(0.8), width = 0.7) +
-      scale_color_manual(values = c("ALS"="#0073C2FF","CTR"="#EFC000FF"))+
-      scale_fill_manual(values=c("ALS"="#0073C2FF","CTR"="#EFC000FF")) +
+      scale_color_manual(values = c("ALS"="#5f91bd","CTR"="#BD8B5F"))+
+      scale_fill_manual(values=c("ALS"="#5f91bd","CTR"="#BD8B5F")) +
       geom_text(aes(label = counts, group = Status), 
                 position = position_dodge(0.8),
                 vjust = -0.3, size = 3.5) + 
-      labs(x = "\n Categories", y = "Frequency % \n", title = categories[i]) +
+      labs(x = " ", y = "Frequency of Patients (%) \n", title = categories[i]) +
       theme_minimal() + 
       theme(panel.grid.minor.x=element_blank(), 
             panel.grid.major.x=element_blank(), 
@@ -783,6 +738,7 @@ barplot_categories <- function(data){
     print(plot_con[[i]])
     dev.off()
   }
+  return(plot_con)
 }
 
 

@@ -240,3 +240,11 @@ dimnames(cont) = list(gender = c("F","M"),
 chisq.test(cont)
 fisher.test(cont)
 
+# weight change
+dat_weights <- dat[,c(1,3,4,5)]
+dat_weights <- apply(dat_weights,2,as.numeric)
+dat_weights <- data.frame(dat_weights) %>% mutate(status = status)
+dat_weights_tmp <- dat_weights %>% group_by(status) %>% summarise_each(funs(mean(.[!is.na(.)]))) 
+mean(data_ALS_final$`Bitte geben Sie Ihr Gewicht an. [Bei Erstdiagnose][Gewicht [kg]]`,na.rm=T)
+mean(data_ALS_final$`Bitte geben Sie Ihr Gewicht an. [Bei Erkrankungsbeginn (erstes Symptom der Motoneuronerkrankung)][Gewicht [kg]]`,na.rm=T)
+lm(c(77.8,78.4,78.9,73.5) ~ c(1,2,3,4))
