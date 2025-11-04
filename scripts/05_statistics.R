@@ -1,11 +1,4 @@
 # demographics & stats
-library(readr)
-library(readxl)
-library(data.table)
-library(summarytools)
-library(zoo)
-library(skimr)
-library(dplyr)
 
 Early_ALS_ALSFRS_R_dictionary_score <- read_excel("data input/Early_ALS ALSFRS R dictionary score.xlsx") 
 unique_ALS_FRS_R <- read_excel("data input/unique_ALS-FRS-R.xlsx")
@@ -133,7 +126,7 @@ age <- floor(as.numeric(difftime(strptime(date_questionnaire, format = "%d/%m/%Y
                                  strptime(birth, format = "%d/%m/%Y"))/365))
 
 age_onset <- age - years_since_onset
-age_onset_stats <- skim(age_onset) # 431 missing -> only 233 missing changed
+age_onset_stats <- skim(age_onset) # 431 missing -> only 228 missing changed
 
 # -> very young patient
 young_patient_data = cbind(data_patients_common_final[303,],
@@ -225,7 +218,10 @@ ggplot(age_CTR_ALS, aes(x=age, fill = type)) +
   scale_fill_manual(values=c("ALS"="#0073C2FF","CTR"="#EFC000FF")) 
 dev.off()
 # variables are not normal, so using Mann-Whitney test
-wilcox.test(age,age_CTR)
+als_ages <- na.omit(age)
+control_ages <- na.omit(age_CTR)
+wilcox.test(als_ages,control_ages) # using this one
+t.test(als_ages,control_ages,var.equal = FALSE)
 
 # -> Sex
 sex_CTR <- data_control_common_final$`Bitte geben Sie Ihr Geschlecht an.`

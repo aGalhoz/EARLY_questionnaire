@@ -1,17 +1,39 @@
 # data from original until ready for ML
 
-library(readr)
-library(dplyr)
 install.packages("colorRamp2")
-library(colorRamp2)
 install.packages("devtools")
-library(devtools)
 install_github("jokergoo/ComplexHeatmap")
 if (!require("BiocManager", quietly = TRUE))
   install.packages("BiocManager")
 BiocManager::install("ComplexHeatmap")
+devtools::install_github("NightingaleHealth/ggforestplot")
+install.packages("wesanderson")
+library(readr)
+library(dplyr)
+library(colorRamp2)
+library(devtools)
 library(ComplexHeatmap)
 library(readxl)
+library(ggplot2)
+library(tibble)
+library(ggrepel)
+library(forestplot)
+library(stringr)
+library(ggpubr)
+library(reshape2)
+library(ggforestplot)
+library(forcats)
+library(wesanderson)
+library(magrittr)
+library(cowplot)
+library(tidyverse)
+library(ggpattern)
+library(lme4)
+library(emmeans)
+library(data.table)
+library(summarytools)
+library(zoo)
+library(skimr)
 
 # # -> new data (end of 2022)
 # data_patients_new <- read_csv("original data/20220908_results-survey529321-EARLY_ALS_Pat.csv")
@@ -95,6 +117,14 @@ Referenzliste_Rostock_interest <- Referenzliste_Rostock[Referenzliste_Rostock$`P
   select(`Patienten/Probanden ID`,`DOB Patient`,`DOB Angehöriger`)
 DOB_dates_new[DOB_dates_new$Patienten_Probanden_ID %in% Referenzliste_Rostock$`Patienten/Probanden ID`,]$DOB_Pat_clean <- format(as.Date(Referenzliste_Rostock_interest$`DOB Patient`,"%Y.%m.%d"),"%d.%m.%Y")
 DOB_dates_new[DOB_dates_new$Patienten_Probanden_ID %in% Referenzliste_Rostock$`Patienten/Probanden ID`,]$DOB_Angehoerige_clean <- format(as.Date(Referenzliste_Rostock_interest$`DOB Angehöriger`,"%Y.%m.%d"),"%d.%m.%Y")
+# -> new dates from Cologne
+DOB_dates_Koln = read_excel("data input/Referenzliste EARLY & TEAR-ALS_Cologne.xlsx", 
+                            col_types = c("numeric", "date", "date"))
+DOB_dates_new <- rbind(DOB_dates_new,
+                       data.frame(Center = rep("Köln",21),
+                                  Patienten_Probanden_ID = DOB_dates_Koln$`Patienten/Probanden ID`,
+                                  DOB_Pat_clean = format(DOB_dates_Koln$`DOB Patient`,"%d.%m.%Y"),
+                                  DOB_Angehoerige_clean = format(DOB_dates_Koln$`DOB Angehöriger`,"%d.%m.%Y")))
 data_control_new_2024_temp2 <- data_control_new_2024 %>%
   select(`Antwort ID`,Zugangscode,`Bitte geben Sie Ihren Geburtsmonat und das Geburtsjahr an.`,`Datum Abgeschickt`) %>%
   dplyr::left_join(Tokens_EARLY_TEAR %>%
@@ -131,18 +161,27 @@ data_patients_new_2024$`Bitte geben Sie Ihren Geburtsmonat und das Geburtsjahr a
 # -> extract only ALS patients of interest
 data_control_new <- data_control_new_2024 # 410 CTR patients
 data_patients_new <- data_patients_new_2024 %>%
-  filter(`Welche Diagnose wurde bei Ihnen gestellt?` == "Amyotrophe Lateralsklerose (ALS)") # 514 ALS patients
+  filter(`Welche Diagnose wurde bei Ihnen gestellt?` == "Amyotrophe Lateralsklerose (ALS)")
+data_patients_new <- data_patients_new[c(1:6,8:514),]  # 513 ALS patients
+
+# Patiens with SMA and HSP for Isabell
+data_patients_SMA_HSP <- data_patients_new_2024 %>%
+  filter(grepl("HSP|SMA", `Welche Diagnose wurde bei Ihnen gestellt?`))
+writexl::write_xlsx(data_patients_SMA_HSP,"data_patients_SMA_HSP.xlsx")
+writexl::write_xlsx(data_control_new_2024,"data_controls.xlsx")
+
 
 # -> extract only CTR patients connected to ALS
-data_control_new <- data_control_new[data_control_new$Zugangscode %in% data_patients_new$Zugangscode,] # 306 CTR patients
+data_control_new <- data_control_new[data_control_new$Zugangscode %in% data_patients_new$Zugangscode,] 
 #data_patients_new <- data_patients_new[data_patients_new$Zugangscode %in% data_control_new$Zugangscode,]
+data_control_new <- data_control_new[c(1:5,7:306),] # 305 CTR patients, there is another repetitive control but has different answers
 
 ## check patients that did not finish the questionnaire (ignore this step now)
 # # how many patients with NA in Datum abgeschickt
-# data_patients_new_NA <- data_patients_new %>%
-#   filter(is.na(`Datum Abgeschickt`)) # 38
-# data_control_new_NA <- data_control_new %>%
-#   filter(is.na(`Datum Abgeschickt`)) # 41
+data_patients_new_NA <- data_patients_new %>%
+  filter(is.na(`Datum Abgeschickt`)) # 38
+data_control_new_NA <- data_control_new %>%
+  filter(is.na(`Datum Abgeschickt`)) # 20
 
 # # heatmap of the patients and controls without NA in Datum abgeschickt 
 # data_patients_new <- data_patients_new[!data_patients_new$`Antwort ID` %in% data_patients_new_NA$`Antwort ID`,] # 476

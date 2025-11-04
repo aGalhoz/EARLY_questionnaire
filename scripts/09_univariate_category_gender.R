@@ -220,7 +220,7 @@ aux_function_precondition <- function(data,which_rows){
   return(dat_final_preconditions_i)
 }
 #for (i in 1:length(subquestions_preconditions)) {
-for (i in 1:12) {
+for (i in c(1:12,14)) {
   subquestion_i <- subquestions_preconditions[i]
   final_ALS_CTR_category_preconditions_i <- final_ALS_CTR_category_preconditions %>%
     filter(`sub-category` == subquestion_i)
@@ -232,16 +232,16 @@ for (i in 1:12) {
 
 univariate_preconditions_subquestion_female <- do.call("rbind", df_subquestions_preconditions_female) %>% 
   as.data.frame() %>%
-  mutate(Variables = subquestions_preconditions[1:12])
+  mutate(Variables = subquestions_preconditions[c(1:12,14)])
 univariate_preconditions_subquestion_male <- do.call("rbind", df_subquestions_preconditions_male) %>% 
   as.data.frame() %>%
-  mutate(Variables = subquestions_preconditions[1:12])
+  mutate(Variables = subquestions_preconditions[c(1:12,14)])
 
 # -> all results together
-univariate_preconditions_female <- do.call("rbind", list(univariate_preconditions_all_female,
+univariate_preconditions_female <- do.call("rbind", list(univariate_preconditions_all_female %>% select(-fdr),
                                                          univariate_preconditions_subquestion_female))
 univariate_preconditions_female <- preparate_data_forest(univariate_preconditions_female)
-univariate_preconditions_male <- do.call("rbind", list(univariate_preconditions_all_male,
+univariate_preconditions_male <- do.call("rbind", list(univariate_preconditions_all_male %>% select(-fdr),
                                                          univariate_preconditions_subquestion_male))
 univariate_preconditions_male <- preparate_data_forest(univariate_preconditions_male)
 
@@ -461,6 +461,7 @@ for (i in 1:length(subsubquestions_lifestyle_tpm)) {
   subsubquestion_i <- subsubquestions_lifestyle_tpm[i]
   final_ALS_CTR_category_subsubquestions_lifestyle_i <- final_ALS_CTR_category_lifestyle_subcategories %>%
     filter(`sub-subcategory` == subsubquestion_i)
+  final_ALS_CTR_category_subsubquestions_lifestyle_i <- final_ALS_CTR_category_lifestyle_subcategories[42,]
   dat_final_subsubquestions_lifestyle_i_female <- aux_function_lifestyle_subquestions(final_ALS_CTR_category_subsubquestions_lifestyle_i,which_female)
   dat_final_subsubquestions_lifestyle_i_male <- aux_function_lifestyle_subquestions(final_ALS_CTR_category_subsubquestions_lifestyle_i,which_male)
   df_subsubquestions_lifestyle_female[[i]] <- univariate_model_new(dat_final_subsubquestions_lifestyle_i_female)[[1]]

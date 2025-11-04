@@ -1,8 +1,4 @@
 ## univariate analysis for specific categories (sent by Isabel)
-
-library(readxl)
-library(stringr)
-library(tibble)
 final_ALS_CTR_category <- read_excel("data input/final_ALS_CTR_questionnaire_summary_IC.xlsx", sheet = "common")
 map_questions_plot <- read_excel("data input/map_questions_plot.xlsx")
 
@@ -728,6 +724,156 @@ pdf("plots/volcano_lifestyle_gender_padj.pdf")
 volcano_plot(univariate_lifestyle_gender,"padj","Lifestyle, gender adjusted (p-adjusted)")
 dev.off()
 
+## check on frequency of past use of caffeine
+freq_coffee <- data_patients_control_combined_all[,c(9,36,44,88,357,401,550)]
+freq_coffee_past <- freq_coffee %>%
+  filter(`Konsumieren Sie aktuell regelmäßig koffeinhaltige Getränke oder haben Sie jemals in Ihrem Leben regelmäßig koffeinhaltige Getränke konsumiert?` == "Ja, in der Vergangenheit")
+freq_coffee_past_dist <- freq_coffee_past %>%
+  #filter(!is.na(`Bitte geben Sie die durchschnittliche Menge des Koffeinkonsums an.`)) %>%
+  mutate(`Bitte geben Sie die durchschnittliche Menge des Koffeinkonsums an.` = ifelse(`Bitte geben Sie die durchschnittliche Menge des Koffeinkonsums an.`== "Sonstiges",
+                                                                                       "Wenig (z.B. 1 – 2 Tassen Kaffee pro Tag)",
+                                                                                       `Bitte geben Sie die durchschnittliche Menge des Koffeinkonsums an.`)) %>%
+  group_by(status, `Bitte geben Sie Ihr Geschlecht an.`,
+           `Bitte geben Sie die durchschnittliche Menge des Koffeinkonsums an.`) %>%
+  summarise(count = n()) 
+
+## check on frequency of past use of alcohol
+freq_alcohol <- data_patients_control_combined_all[,c(9,38,53,209,319,550)] 
+freq_alcohol_past <- freq_alcohol %>%
+  filter(`Konsumieren Sie aktuell regelmäßig alkoholische Getränke oder haben Sie jemals in Ihrem Leben regelmäßig alkoholische Getränke konsumiert?` == "Ja, in der Vergangenheit")
+freq_alcohol_past_dist = freq_alcohol_past %>%
+  #filter(!is.na(`Wie viele alkoholische Getränke konsumieren Sie durchschnittlich bzw. haben Sie durchschnittlich konsumiert? `)) %>%
+   group_by(status, `Bitte geben Sie Ihr Geschlecht an.`,
+            `Wie viele alkoholische Getränke konsumieren Sie durchschnittlich bzw. haben Sie durchschnittlich konsumiert? `) %>%
+  summarise(count = n())
+
+## check on frequency of past use of cigarettes
+freq_smoke <- data_patients_control_combined_all[,c(9,37,52,139,213,550)]
+freq_smoke_past <- freq_smoke %>%
+  filter(`Rauchen Sie aktuell oder haben Sie jemals in Ihrem Leben regelmäßig Zigaretten (oder Zigarren etc.) geraucht?` == "Ja, in Vergangenheit") %>%
+  mutate(
+    cig_num = as.numeric(`Wieviele Zigaretten (bzw. Zigarren etc.) rauchen Sie durchschnittlich pro Tag bzw. haben Sie durchschnittlich pro Tag geraucht?`),
+    quantity = case_when(
+      cig_num < 7 ~ "Few (1–6 p/ day)",
+      cig_num < 15 ~ "Moderate (7–14 p/ day)",
+      cig_num >= 15 ~ "High (>14 p/ day)",
+      TRUE ~ NA_character_
+    )
+  )
+freq_smoke_past_dist = freq_smoke_past %>%
+  group_by(status,`Bitte geben Sie Ihr Geschlecht an.`,quantity) %>%
+  summarise(count = n())
+summaryStats(na.omit(as.numeric(freq_smoke_past %>% filter(status == 1) %>% pull(`Wieviele Zigaretten (bzw. Zigarren etc.) rauchen Sie durchschnittlich pro Tag bzw. haben Sie durchschnittlich pro Tag geraucht?`))), quartiles = TRUE) 
+summaryStats(na.omit(as.numeric(freq_smoke_past %>% filter(status == 0) %>% pull(`Wieviele Zigaretten (bzw. Zigarren etc.) rauchen Sie durchschnittlich pro Tag bzw. haben Sie durchschnittlich pro Tag geraucht?`))), quartiles = TRUE) 
+
+## check on frequency of current use of caffeine
+freq_coffee_current <- freq_coffee %>%
+  filter(`Konsumieren Sie aktuell regelmäßig koffeinhaltige Getränke oder haben Sie jemals in Ihrem Leben regelmäßig koffeinhaltige Getränke konsumiert?` == "Ja, aktuell")
+freq_coffee_current_dist = freq_coffee_current %>%
+  mutate(`Bitte geben Sie die durchschnittliche Menge des Koffeinkonsums an.` = ifelse(`Bitte geben Sie die durchschnittliche Menge des Koffeinkonsums an. [Sonstiges]` %in% c("früher 3 – 5 Tassen Kaffee pro Tag und momentan nur 1 Tasse pro Tag",
+                                                                                                                                                                               "2-5 Tassen in der Woche. Bin Teetrinker",
+                                                                                                                                                                               "2 Tassen pro Woche"),
+                                                                                       "Wenig (z.B. 1 – 2 Tassen Kaffee pro Tag)",
+                                                                                       ifelse(`Bitte geben Sie die durchschnittliche Menge des Koffeinkonsums an. [Sonstiges]` %in% c("Cola 2 Liter ca pro tag",
+                                                                                                                                                                                      "tee  6tassen"),
+                                                                                              "Viel (> 5 Tassen Kaffee pro Tag)",
+                                                                                       ifelse(`Bitte geben Sie die durchschnittliche Menge des Koffeinkonsums an. [Sonstiges]` %in% c("Kein Kaffee, sondern Cola (ca. 0,5L)",
+                                                                                                                                                                                      "4 Tassen Schw.Tee","2 - 3 Tassen schwarzer Tee"),
+                                                                                              "Moderat (z.B. 3 – 5 Tassen Kaffee pro Tag)",
+                                                                                              `Bitte geben Sie die durchschnittliche Menge des Koffeinkonsums an.`)))) %>%
+  mutate(`Bitte geben Sie die durchschnittliche Menge des Koffeinkonsums an.` = ifelse(is.na(`Bitte geben Sie Ihr Geschlecht an.`),NA,
+                                                                                       `Bitte geben Sie die durchschnittliche Menge des Koffeinkonsums an.`)) %>%
+  dplyr::group_by(status, `Bitte geben Sie Ihr Geschlecht an.`,
+                  `Bitte geben Sie die durchschnittliche Menge des Koffeinkonsums an.`) %>%
+  dplyr::summarise(count = n())
+
+## check on frequency of current use of alcohol
+freq_alcohol_current <- freq_alcohol %>%
+  filter(`Konsumieren Sie aktuell regelmäßig alkoholische Getränke oder haben Sie jemals in Ihrem Leben regelmäßig alkoholische Getränke konsumiert?` == "Ja, aktuell")
+freq_alcohol_current_dist = freq_alcohol_current %>%
+  mutate(`Wie viele alkoholische Getränke konsumieren Sie durchschnittlich bzw. haben Sie durchschnittlich konsumiert? ` = ifelse(is.na(`Bitte geben Sie Ihr Geschlecht an.`),NA,
+                                                                                                                                  `Wie viele alkoholische Getränke konsumieren Sie durchschnittlich bzw. haben Sie durchschnittlich konsumiert? `
+                                                                                                                                  )) %>%
+ # filter(!is.na(`Wie viele alkoholische Getränke konsumieren Sie durchschnittlich bzw. haben Sie durchschnittlich konsumiert? `)) %>%
+  dplyr::group_by(status, `Bitte geben Sie Ihr Geschlecht an.`,
+                  `Wie viele alkoholische Getränke konsumieren Sie durchschnittlich bzw. haben Sie durchschnittlich konsumiert? `) %>%
+  dplyr::summarise(count = n())
+
+## check on frequency of past use of cigarettes
+freq_smoke_current <- freq_smoke %>%
+  filter(`Rauchen Sie aktuell oder haben Sie jemals in Ihrem Leben regelmäßig Zigaretten (oder Zigarren etc.) geraucht?` == "Ja, aktuell") %>%
+  mutate(
+    cig_num = as.numeric(`Wieviele Zigaretten (bzw. Zigarren etc.) rauchen Sie durchschnittlich pro Tag bzw. haben Sie durchschnittlich pro Tag geraucht?`),
+    quantity = case_when(
+      cig_num < 7 ~ "Few (1–6 p/ day)",
+      cig_num < 15 ~ "Moderate (7–14 p/ day)",
+      cig_num >= 15 ~ "High (>14 p/ day)",
+      TRUE ~ NA_character_
+    ))
+freq_smoke_current_dist = freq_smoke_current %>%
+  #filter(!is.na(`Wieviele Zigaretten (bzw. Zigarren etc.) rauchen Sie durchschnittlich pro Tag bzw. haben Sie durchschnittlich pro Tag geraucht?`)) %>%
+  group_by(status,`Bitte geben Sie Ihr Geschlecht an.`,quantity) %>%
+  dplyr::summarise(count = n())
+summaryStats(na.omit(as.numeric(freq_smoke_current %>% filter(status == 1) %>% pull(`Wieviele Zigaretten (bzw. Zigarren etc.) rauchen Sie durchschnittlich pro Tag bzw. haben Sie durchschnittlich pro Tag geraucht?`))), quartiles = TRUE) 
+summaryStats(na.omit(as.numeric(freq_smoke_current %>% filter(status == 0) %>% pull(`Wieviele Zigaretten (bzw. Zigarren etc.) rauchen Sie durchschnittlich pro Tag bzw. haben Sie durchschnittlich pro Tag geraucht?`))), quartiles = TRUE) 
+
+# make data together and plot quantities 
+# -> alcohol
+freq_alcohol_dist = rbind(data.frame(freq_alcohol_current_dist) %>% mutate(type = rep("Currently",13)),
+                          data.frame(freq_alcohol_past_dist) %>% mutate(type = rep("In the past",13))) %>%
+  rename(quantity = Wie.viele.alkoholische.Getränke.konsumieren.Sie.durchschnittlich.bzw..haben.Sie.durchschnittlich.konsumiert..) %>%
+  mutate(status = ifelse(status == 0,"Controls",ifelse(status == 1,"ALS",NA)),
+         sex = ifelse(Bitte.geben.Sie.Ihr.Geschlecht.an. == "männlich","Male",
+                      ifelse(Bitte.geben.Sie.Ihr.Geschlecht.an. == "weiblich","Female",NA)),
+         quantity = ifelse(quantity %in% c("Bis zu 2 Standardgetränke pro Tag (Männer) bzw. 1 Standardgetränk (Frauen) an max. 5 Tagen in der Woche",
+                                           "Bis zu 2 Standardgetränke pro Tag (Männer) bzw. 1 Standardgetränk pro Tag (Frauen) an max. 5 Tagen in der Woche"),
+                           "Low (1-2 drinks per day)",
+                           ifelse(quantity %in% c("Mehr als 2 Standardgetränke pro Tag (Männer) bzw. 1 Standardgetränk (Frauen) an max. 5 Tagen in der Woche",
+                                                  "Mehr als 2 Standardgetränke pro Tag (Männer) bzw. 1 Standardgetränk pro Tag (Frauen) an max. 5 Tagen in der Woche"),
+                                  "High (> 1-2 drinks per day)",NA))) %>%
+  filter(!is.na(sex))
+# -> coffee
+freq_coffee_dist = rbind(data.frame(freq_coffee_current_dist) %>% mutate(type = rep("Currently",19)),
+                          data.frame(freq_coffee_past_dist) %>% mutate(type = rep("In the past",14))) %>%
+  rename(quantity = Bitte.geben.Sie.die.durchschnittliche.Menge.des.Koffeinkonsums.an.) %>%
+  mutate(status = ifelse(status == 0,"Controls",ifelse(status == 1,"ALS",NA)),
+         sex = ifelse(Bitte.geben.Sie.Ihr.Geschlecht.an. == "männlich","Male",
+                      ifelse(Bitte.geben.Sie.Ihr.Geschlecht.an. == "weiblich","Female",NA)),
+         quantity = ifelse(quantity %in% c("Moderat (z.B. 3 – 5 Tassen Kaffee pro Tag)"),
+                           "Moderate (3-5 cups per day)",
+                           ifelse(quantity %in% c("Viel (> 5 Tassen Kaffee pro Tag)"),
+                                  "High (> 5 cups per day)",
+                                  ifelse(quantity %in% c("Wenig (z.B. 1 – 2 Tassen Kaffee pro Tag)"),
+                                          "Low (1-2 cups per day)",NA)))) %>%
+  filter(!is.na(sex))
+# -> smoking
+freq_smoke_dist = rbind(data.frame(freq_smoke_current_dist) %>% mutate(type = rep("Currently",14)),
+                          data.frame(freq_smoke_past_dist) %>% mutate(type = rep("In the past",18))) %>%
+  mutate(status = ifelse(status == 0,"Controls",ifelse(status == 1,"ALS",NA)),
+         sex = ifelse(Bitte.geben.Sie.Ihr.Geschlecht.an. == "männlich","Male",
+                      ifelse(Bitte.geben.Sie.Ihr.Geschlecht.an. == "weiblich","Female",NA)),
+         quantity = ifelse(quantity %in% c("Moderate (7–14 p/ day)"),
+                           "Moderate (1-14 cigarettes per day)",
+                           ifelse(quantity %in% c("High (>14 p/ day)"),
+                                  "High (> 14 cigarettes per day)",
+                                  ifelse(quantity %in% c("Few (1–6 p/ day)"),
+                                         "Low (1-6 cigarettes per day)",NA)))) %>%
+  filter(!is.na(sex))
+
+
+plot_alcohol = plot_substance(freq_alcohol_dist,"Quantity of alcohol consumption")
+plot_smoke = plot_substance(freq_smoke_dist,"Quantity of cigarette consumption")
+plot_caffeine = plot_substance(freq_coffee_dist,"Quantity of caffeine consumption")
+
+pdf("plots/barplots_substance_quantity.pdf",height = 13,width = 15.8)
+plot_grid(plot_caffeine,plot_alcohol,
+          plot_smoke,
+          ncol = 2, nrow=2, 
+          labels = c("A","B","C")) 
+dev.off()
+
+#### ADDITIONAL FUNCTIONS
+
 
 univariate_model_new <- function(data_final){
   res = list()
@@ -791,7 +937,7 @@ univariate_model_new <- function(data_final){
   df = do.call("rbind", res) %>% as.data.frame() %>% rownames_to_column("Variables")
   df$Features = do.call("c", ftr)
   df$t_stat = df$Estimate/df$`Std. Error`
-  df$fdr = p.adjust(df$`Pr(>|z|)`, "fdr")
+  #df$fdr = p.adjust(df$`Pr(>|z|)`, "fdr")
   eff_CI_new = do.call("rbind",eff_CI) %>% as.data.frame() %>% rownames_to_column("Variables") 
   colnames(eff_CI_new) <- c("Variables","2.5 %","97.5 %")
   df <- df %>%
@@ -805,13 +951,13 @@ univariate_model_adjustment_new <- function(data_final,variable_adjust){
   ftr = list()
   eff_CI = list()
   for (i in colnames(data_final)){
-    if (i %in% c("status", "status2",variable_adjust)){
+    if (i %in% c("status", "status2","gender")){
       next
     }
     if (nlevels(as.factor(data_final[,i])) < 2){
       next
     }
-    form = as.formula(paste("status2 ~",variable_adjust, "+ ", i))
+    form = as.formula(paste("status2 ~ gender + ", i))
     if(length(grep("Nein",data_final[,i]))!=0){
       unique_values <- unique(data_final[,i])
       if(length(unique_values) < 5){
@@ -823,13 +969,14 @@ univariate_model_adjustment_new <- function(data_final,variable_adjust){
     mod = glm(form, data_final, family = "binomial")
     tmp = summary(mod)$coefficients
     rn = rownames(tmp)
-    rn = rn[!rn %in% c("(Intercept)",variable_adjust)]
+    print(rn)
+    rn = rn[rn %in% i]
     rn = sub(i,"",rn,ignore.case = T)
-    tmp = tmp[!rownames(tmp) %in% c("(Intercept)",variable_adjust),, drop = F] %>% as.data.frame()
+    tmp = tmp[rownames(tmp) %in% i,, drop = F] %>% as.data.frame()
     rownames(tmp) = rn
     eff = vector("numeric", length = length(rn))
     eff_CI_tmp = exp(confint.default(mod))
-    eff_CI_tmp <- eff_CI_tmp[rownames(eff_CI_tmp) != "(Intercept)",, drop = F] %>% as.data.frame()
+    eff_CI_tmp <- eff_CI_tmp[rownames(eff_CI_tmp) == i,, drop = F] %>% as.data.frame()
     # if (i %in% colnames_dat_fil_cat){
     #   if (length(grep(" ",rn)) > 0){
     #     cl = substr(rn, nchar(rn) - 1, nchar(rn))
@@ -849,7 +996,7 @@ univariate_model_adjustment_new <- function(data_final,variable_adjust){
     #   eff = meandiff
     # }
     eff = (coef(mod))
-    eff = eff[!names(eff) %in% c("(Intercept)",variable_adjust)] %>% as.data.frame()
+    eff = eff[names(eff) %in% i] %>% as.data.frame()
     # print(eff)
     tmp$eff = eff[1,]
     # # tmp$Type = ifelse(i %in% colnames_dat_fil_cat,"Categorical","Continuous")
@@ -859,7 +1006,7 @@ univariate_model_adjustment_new <- function(data_final,variable_adjust){
     rownames(eff_CI_tmp) <- i
     # print(tmp)
     # res[[i]] = tmp
-    # ftr[[i]] = rn
+    ftr[[i]] = rn
     # eff_CI[[i]] = eff_CI_tmp
     # tmp$Type = ifelse(i %in% colnames_dat_fil_cat,"Categorical","Continuous")
     res[[i]] = tmp
@@ -871,12 +1018,110 @@ univariate_model_adjustment_new <- function(data_final,variable_adjust){
   #return(list(res,eff_CI))
   df = do.call("rbind",res) %>% as.data.frame() %>% rownames_to_column("Variables")
   #print(df)
-  #df$Features = do.call("c", ftr)
+  df$Features = do.call("c", ftr)
   df$t_stat = df$Estimate/df$`Std. Error`
-  df$fdr = p.adjust(df$`Pr(>|z|)`, "fdr")
+  #df$fdr = p.adjust(df$`Pr(>|z|)`, "fdr")
   eff_CI_new = do.call("rbind",eff_CI) %>% as.data.frame() %>% rownames_to_column("Variables")
   colnames(eff_CI_new) <- c("Variables","2.5 %","97.5 %")
   df$"2.5 %" <- eff_CI_new["2.5 %"]
   df$"97.5 %" <- eff_CI_new[,"97.5 %"]
-  return(list(df,eff_CI_new))
+  return(df)
+}
+
+
+plot_substance <- function(data, title) {
+  
+  data %>%
+    mutate(
+      quantity = ifelse(is.na(quantity) | quantity == "", "n.a.", quantity),
+      
+      # Normalize quantity names
+      quantity = case_when(
+        grepl("(?i)low", quantity) ~ "Low",
+        grepl("(?i)moderate", quantity) ~ "Moderate",
+        grepl("(?i)high", quantity) ~ "High",
+        TRUE ~ "n.a."
+      ),
+      quantity = factor(quantity, levels = c("Low", "Moderate", "High", "n.a.")),
+      
+      # Define bar order
+      group_order = paste(status, type),
+      group_order = factor(
+        group_order,
+        levels = c("ALS Currently", "Controls Currently",
+                   "ALS In the past", "Controls In the past")
+      )
+    ) %>%
+    group_by(sex, status, type, quantity, group_order) %>%
+    summarise(count = sum(count, na.rm = TRUE), .groups = "drop") %>%
+    group_by(sex,status) %>%
+    mutate(percentage = count / sum(count) * 100) %>%
+    
+    ggplot(aes(
+      x = quantity,
+      y = percentage,
+      fill = status,
+      pattern = type,
+      group = group_order
+    )) +
+    geom_bar_pattern(
+      position = position_dodge(width = 0.9),
+      stat = "identity",
+      colour = NA,
+      pattern_fill = "white",        
+      pattern_colour = "grey39",
+      pattern_angle = 45,
+      pattern_density = 0.05,
+      pattern_spacing = 0.03,
+      pattern_key_scale_factor = 0.5,
+      #key_glyph = "rect"
+    ) +
+    geom_text(
+      aes(label = sprintf("%.1f", percentage), group = group_order),
+      position = position_dodge(width = 0.9),
+      vjust = -0.3,
+      size = 4.8,
+      color = "black"
+    ) +
+    # Color legend (Groups)
+    scale_fill_manual(
+      values = c("ALS" = "#5f91bd", "Controls" = "#BD8B5F"),
+      name = "Group",
+      guide = guide_legend(override.aes = list(pattern = "none"))
+    ) +
+    # Pattern legend (Time)
+    scale_pattern_manual(
+      values = c("Currently" = "none", "In the past" = "stripe"),
+      name = "" ,
+      guide = guide_legend(
+        override.aes = list(
+          pattern_fill = NA,   # white background
+          pattern_colour = "grey39",  # visible stripes
+          colour = "black"
+        ))
+    ) +
+    facet_wrap(~sex, ncol = 1) +
+    labs(
+      title = title,
+      x = "",
+      y = "Frequency (%) \n"
+    ) +
+    theme_minimal(base_size = 14.5) +
+    theme(
+      plot.title = element_text(face = "bold", size = 15.5, hjust = 0.5),
+      axis.title = element_text(size = 14.7),
+      axis.text = element_text(size = 14.2),
+      legend.title = element_text(size = 14),
+      legend.text = element_text(size = 14),
+      panel.grid.minor = element_blank(),
+      strip.background  = element_blank(),
+      panel.grid.major = element_line(colour = "lightgrey"),
+      panel.border = element_blank(),
+      panel.grid.minor.y = element_blank(),
+      panel.grid.major.x  = element_blank(),
+      axis.text.x = element_text(angle = 45, hjust = 0.8, vjust = 0.8),
+      strip.text = element_text(size = 15.5),
+      legend.margin=margin(0,0,0,0),
+      legend.box.margin=margin(-5,-5,-5,-5)
+    )
 }

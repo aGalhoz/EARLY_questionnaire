@@ -1,8 +1,4 @@
 ## UNIVARIATE ANALYSIS
-library(tibble)
-library(ggplot2)
-library(ggrepel)
-library(forestplot)
 
 # Univariate analysis
 
