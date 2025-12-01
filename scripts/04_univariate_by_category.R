@@ -170,18 +170,25 @@ univariate_model_adjustment_new <- function(df, adjust_var, status_var = "status
 # 3) run_univariate wrapper: uses the above two functions and ensures 'eff' column exists
 run_univariate <- function(dat, adjust_var_name = NULL) {
   
- # # Relevel categorical variables to have "Nein" as reference
-  #vars <- setdiff(colnames(dat), c("status", "status2", adjust_var_name))
-  #for (v in vars) {
-    #x <- dat[[v]]
-    # Only act on categorical variables with more than 1 unique value
-    ##if ((is.factor(x) || is.character(x)) && length(unique(na.omit(x))) > 1) {
-    #  x <- factor(x)
-     # if ("Nein" %in% levels(x)) x <- relevel(x, ref = "Nein")
-      #dat[[v]] <- x
-    #}
+ # Relevel categorical variables to have "Nein" as reference
+ vars <- setdiff(colnames(dat), c("status", "status2", adjust_var_name))
+ for (v in vars) {
+ x <- dat[[v]]
+ #Only act on categorical variables with more than 1 unique value
+ if ((is.factor(x) || is.character(x)) && length(unique(na.omit(x))) > 1) {
+  x <- factor(x)
+ if ("Nein" %in% levels(x)) x <- relevel(x, ref = "Nein")
+ dat[[v]] <- x
+ }}
+
+  standard_cols <- c(
+    "Variables", "eff", "Estimate", "Std.Error", "z value",
+    "Pr(>|z|)", "2.5 %", "97.5 %"
+  )
   
   out <- tryCatch({
+    varname = colnames(dat)[1]
+    print(varname)
     if (!is.null(adjust_var_name)) {
       tmp <- univariate_model_adjustment_new(cbind(dat, dat_final_age_sex[adjust_var_name, drop = FALSE]), 
                                              adjust_var_name)
@@ -192,7 +199,12 @@ run_univariate <- function(dat, adjust_var_name = NULL) {
       res <- tmp[[1]]
       ci  <- tmp[[2]]
     }
-    if (is.null(res) || nrow(res) == 0) return(NULL)
+    if (is.null(res) || nrow(res) == 0) {
+      empty <- as.data.frame(t(rep(NA, length(standard_cols))))
+      colnames(empty) <- standard_cols
+      empty$Variables <- colnames(dat)[1]
+      return(empty)
+    }
     if (!"eff" %in% colnames(res)) res$eff <- res$Estimate
     # attach CI columns into res for downstream functions (merge by Variables)
     if (!is.null(ci) && nrow(ci) > 0) {
@@ -203,10 +215,17 @@ run_univariate <- function(dat, adjust_var_name = NULL) {
     } else {
       res[["2.5 %"]] <- NA ; res[["97.5 %"]] <- NA
     }
-    return(res)
+    for (nm in standard_cols) {
+      if (!nm %in% colnames(res)) res[[nm]] <- NA
+    }
+    res <- res[, standard_cols, drop = FALSE]
+    
+    res
   }, error = function(e) {
-    warning("Skipping due to error: ", e$message)
-    NULL
+    empty <- as.data.frame(t(rep(NA, length(standard_cols))))
+    colnames(empty) <- standard_cols
+    empty$Variables <- colnames(dat)[1]
+    empty
   })
   out
 }
@@ -330,7 +349,7 @@ run_subcategory <- function(final_cat_df, dat_final, sub_col = "sub-category",
 }
 
 # -----------------------------
-# 6) save_univar_results: export tables + plots (expects odds_ratio_plot & volcano_plot available)
+# 6) save_univar_results: export tables + plots 
 save_univar_results <- function(univar, univar_gender, plot_title, prefix) {
   if (is.null(univar) || nrow(univar) == 0) {
     message("No univar results for ", prefix, " — skipping save/plot.")
@@ -392,29 +411,53 @@ save_univar_results <- function(univar, univar_gender, plot_title, prefix) {
   message("Univariate results saved for ", prefix)
 }
 
-##############################################################################
-## Start analysis proper (data preparation + calls)
-##############################################################################
+
+save_univar_results_gender <- function(univar_female, univar_male, plot_title, prefix) {
+  if (is.null(univar_female) || nrow(univar_female) == 0) {
+    message("No univar results for ", prefix, " — skipping save/plot.")
+    return(NULL)
+  }
+  univar_female_p <- preparate_data_forest(univar_female)
+  univar_male_p <- preparate_data_forest(univar_male)
+  
+  writexl::write_xlsx(univar_female_p, paste0("data code output/",prefix, "_female.xlsx"))
+  writexl::write_xlsx(univar_male_p, paste0("data code output/",prefix, "_male.xlsx"))
+  
+  message("Univariate results saved for ", prefix)
+}
 
 # -----------------------------
-# A. Load / subset metadata (already in your env)
+# 7) Helper to attach status column to subset before calling run_univariate
+attach_status <- function(df_block) {
+  if (!("status" %in% colnames(df_block))) df_block$status <- dat_final$status
+  if (!("status2" %in% colnames(df_block))) df_block$status2 <- dat_final$status2
+  # ensure column order keeps predictors first and status last:
+  status_cols <- intersect(c("status","status2"), colnames(df_block))
+  pred_cols <- setdiff(colnames(df_block), status_cols)
+  df_block[, c(pred_cols, status_cols), drop = FALSE]
+}
+
+##############################################################################
+## Univariate analyses
+
+# -----------------------------
 # 1. load data: which questions to focus on 
 final_ALS_CTR_category <- read_excel("data input/final_ALS_CTR_questionnaire_summary_IC.xlsx", sheet = "common") 
 map_questions_plot <- read_excel("data input/map_questions_plot.xlsx") 
 
 # -----------------------------
-# B. Filter only questions with category
+# 2. Filter only questions with category
 final_ALS_CTR_category_temp <- final_ALS_CTR_category[!is.na(final_ALS_CTR_category$category), 
                                                       c("original question (ALS)","original question (CTR)",
                                                         "question in EN (ALS)","question in EN (CTR)",
                                                         "col_classification","category","sub-category","sub-subcategory")]
-# age/sex rows (make.names will be applied later)
+# age/sex rows
 final_ALS_CTR_category_temp_age_sex <- final_ALS_CTR_category[
   final_ALS_CTR_category$`question in EN (ALS)` %in% c("birth","sex"), , drop = FALSE
 ]
 
 # -----------------------------
-# C. Data preprocessing: split continuous vs categorical
+# 3. Data preprocessing: split continuous vs categorical
 # (Assumes dat_imp exists and question_annotation vector exists.)
 dat_fil_con <- dat_imp[, question_annotation == "Continuous", drop = FALSE]
 # numeric + scale
@@ -454,13 +497,8 @@ if (length(sex_col_candidates) == 0) {
 }
 
 # -----------------------------
-# D. Prepare final helper objects: question lists per classification
-final_ALS_CTR_category_temp <- final_ALS_CTR_category_temp  # already reduced
-
 ##############################################################################
-## Run analyses by category: Non-motor, Healthcare, Pre-conditions, Diet, Lifestyle
-## We will adjust only for sex: determine the adjust_var_name from dat_final_age_sex
-##############################################################################
+## 4. Run analyses by category: Non-motor, Healthcare, Pre-conditions, Diet, Lifestyle
 
 # pick adjust_var_name: if dat_final_age_sex has a known sex column use it, otherwise NULL
 adjust_var_name <- NULL
@@ -477,18 +515,9 @@ if (exists("dat_final_age_sex") && ncol(dat_final_age_sex) >= 1) {
   colnames(dat_final_age_sex) <- make.names(colnames(dat_final_age_sex))
 }
 
-# NOTE: run_univariate expects dat blocks which themselves contain a "status" column
-# Ensure dat_final's last column is status; if not, we add it in subsets below.
-
-# Helper to attach status column to subset before calling run_univariate
-attach_status <- function(df_block) {
-  if (!("status" %in% colnames(df_block))) df_block$status <- dat_final$status
-  if (!("status2" %in% colnames(df_block))) df_block$status2 <- dat_final$status2
-  # ensure column order keeps predictors first and status last:
-  status_cols <- intersect(c("status","status2"), colnames(df_block))
-  pred_cols <- setdiff(colnames(df_block), status_cols)
-  df_block[, c(pred_cols, status_cols), drop = FALSE]
-}
+# Gender specific 
+which_female <- dat_final$Bitte.geben.Sie.Ihr.Geschlecht.an. == "weiblich"
+which_male <- dat_final$Bitte.geben.Sie.Ihr.Geschlecht.an. == "männlich"
 
 # ---- Non-motor symptoms ----
 final_nonmotor <- final_ALS_CTR_category_temp[final_ALS_CTR_category_temp$category == "non-motor symptoms", , drop = FALSE]
@@ -508,12 +537,23 @@ univar_general <- list(
                                  adjust_var_name = adjust_var_name)
 )
 
+univar_general_female = run_univariate(dat_nonmotor_general[which_female,], adjust_var_name = NULL)
+univar_general_male = run_univariate(dat_nonmotor_general[which_male,], adjust_var_name = NULL)
+
 # nonmotor other subcategories
 final_nonmotor_diff <- final_nonmotor[final_nonmotor$`sub-category` != "general", , drop = FALSE]
 univar_diff <- run_subcategory(final_nonmotor_diff, 
                                dat_final, sub_col = "sub-category", 
                                sum_rows = TRUE, adjust_var_name = adjust_var_name,
                                na_check = TRUE)
+univar_diff_female <- run_subcategory(final_nonmotor_diff, 
+                               dat_final[which_female,], sub_col = "sub-category", 
+                               sum_rows = TRUE, adjust_var_name = NULL,
+                               na_check = TRUE)[[1]]
+univar_diff_male <- run_subcategory(final_nonmotor_diff, 
+                                      dat_final[which_male,], sub_col = "sub-category", 
+                                      sum_rows = TRUE, adjust_var_name = NULL,
+                                      na_check = TRUE)[[1]]
 
 # nonmotor each sub-subcategory individually
 univar_diff_subcat = run_subcategory(final_nonmotor_diff,
@@ -521,6 +561,16 @@ univar_diff_subcat = run_subcategory(final_nonmotor_diff,
                                      sum_rows = FALSE,
                                      adjust_var_name = adjust_var_name,
                                      na_check = TRUE)
+univar_diff_subcat_female = run_subcategory(final_nonmotor_diff,
+                                     dat_final[which_female,], sub_col = "sub-subcategory",
+                                     sum_rows = FALSE,
+                                     adjust_var_name = NULL,
+                                     na_check = TRUE)[[1]]
+univar_diff_subcat_male = run_subcategory(final_nonmotor_diff,
+                                            dat_final[which_male,], sub_col = "sub-subcategory",
+                                            sum_rows = FALSE,
+                                            adjust_var_name = NULL,
+                                            na_check = TRUE)[[1]]
 
 # combine and save
 univar_nonmotor <- do.call(rbind, Filter(Negate(is.null), list(univar_general$univar, 
@@ -531,6 +581,14 @@ univar_nonmotor_gender <- do.call(rbind, Filter(Negate(is.null), list(univar_gen
                                                                       univar_diff_subcat$univar_gender)))
 save_univar_results(univar_nonmotor, univar_nonmotor_gender, "Non-motor symptoms", "univariate_nonmotor")
 
+univar_nonmotor_female = do.call(rbind, Filter(Negate(is.null), list(univar_general_female, 
+                                                                     univar_diff_female,
+                                                                     univar_diff_subcat_female)))
+univar_nonmotor_male = do.call(rbind, Filter(Negate(is.null), list(univar_general_male, 
+                                                                     univar_diff_male,
+                                                                     univar_diff_subcat_male)))
+save_univar_results_gender(univar_nonmotor_female,univar_nonmotor_male,"Non-motor symptoms", "univariate_nonmotor")
+
 # ---- Contacts healthcare system ----
 final_healthcare <- final_ALS_CTR_category_temp[final_ALS_CTR_category_temp$category == "contacts healthcare system", , drop = FALSE]
 univar_healthcare <- run_subcategory(final_healthcare, dat_final, sub_col = "sub-category", 
@@ -538,17 +596,42 @@ univar_healthcare <- run_subcategory(final_healthcare, dat_final, sub_col = "sub
                                      na_check = FALSE)
 save_univar_results(univar_healthcare$univar, univar_healthcare$univar_gender, "Contacts healthcare system", "univariate_healthcare")
 
+univar_healthcare_female = run_subcategory(final_healthcare, dat_final[which_female,], sub_col = "sub-category", 
+                                           sum_rows = TRUE, adjust_var_name = NULL,
+                                           na_check = FALSE)[[1]]
+
+univar_healthcare_male = run_subcategory(final_healthcare, dat_final[which_male,], sub_col = "sub-category", 
+                                           sum_rows = TRUE, adjust_var_name = NULL,
+                                           na_check = FALSE)[[1]]
+save_univar_results_gender(univar_healthcare_female,univar_healthcare_male,"Contacts healthcare system", "univariate_healthcare")
+
 # ---- Pre-existing conditions ----
 final_preconditions <- final_ALS_CTR_category_temp[final_ALS_CTR_category_temp$category == "pre-existing conditions", , drop = FALSE]
 univar_preconditions <- run_subcategory(final_preconditions, dat_final, 
                                         sub_col = "sub-category", sum_rows = TRUE, 
                                         adjust_var_name = adjust_var_name,
                                         na_check = FALSE, na_yes_check = TRUE)
+univar_preconditions_female <- run_subcategory(final_preconditions, dat_final[which_female,], 
+                                        sub_col = "sub-category", sum_rows = TRUE, 
+                                        adjust_var_name = NULL,
+                                        na_check = FALSE, na_yes_check = TRUE)[[1]]
+univar_preconditions_male <- run_subcategory(final_preconditions, dat_final[which_male,], 
+                                               sub_col = "sub-category", sum_rows = TRUE, 
+                                               adjust_var_name = NULL,
+                                               na_check = FALSE, na_yes_check = TRUE)[[1]]
 
 univar_preconditions_subcat = run_subcategory(final_preconditions,dat_final,
                                               sub_col = "sub-subcategory",sum_rows = FALSE,
                                               adjust_var_name = adjust_var_name,
                                               na_check = FALSE, na_yes_check = TRUE)
+univar_preconditions_subcat_female = run_subcategory(final_preconditions,dat_final[which_female,],
+                                              sub_col = "sub-subcategory",sum_rows = FALSE,
+                                              adjust_var_name = NULL,
+                                              na_check = FALSE, na_yes_check = TRUE)[[1]]
+univar_preconditions_subcat_male = run_subcategory(final_preconditions,dat_final[which_male,],
+                                              sub_col = "sub-subcategory",sum_rows = FALSE,
+                                              adjust_var_name = NULL,
+                                              na_check = FALSE, na_yes_check = TRUE)[[1]]
 
 # combine and save
 univar_preconditions_all <- do.call(rbind, Filter(Negate(is.null), list(univar_preconditions$univar, 
@@ -557,6 +640,13 @@ univar_preconditions_all_gender <- do.call(rbind, Filter(Negate(is.null),
                                                          list(univar_preconditions$univar_gender, 
                                                               univar_preconditions_subcat$univar_genderunivar_diff_subcat$univar_gender)))
 save_univar_results(univar_preconditions_all, univar_preconditions_all_gender, "pre-existing conditions", "univariate_preexisting")
+
+
+univar_preconditions_all_female = do.call(rbind, Filter(Negate(is.null), list(univar_preconditions_female, 
+                                                                              univar_preconditions_subcat_female)))
+univar_preconditions_all_male = do.call(rbind, Filter(Negate(is.null), list(univar_preconditions_male, 
+                                                                              univar_preconditions_subcat_male)))
+save_univar_results_gender(univar_preconditions_all_female,univar_preconditions_all_male,"pre-existing conditions", "univariate_preexisting")
 
 # ---- Diet and weight ----
 final_dietweight <- final_ALS_CTR_category_temp[final_ALS_CTR_category_temp$category == "diet and weight", , drop = FALSE]
@@ -573,38 +663,98 @@ univar_dietweight <- list(
 )
 save_univar_results(univar_dietweight$univar, univar_dietweight$univar_gender, "Diet and weight", "univariate_dietweight")
 
+univar_dietweight_female = run_univariate(dat_dietweight_all[which_female,], adjust_var_name = NULL)
+univar_dietweight_male = run_univariate(dat_dietweight_all[which_male,], adjust_var_name = NULL)
+save_univar_results_gender(univar_dietweight_female,univar_dietweight_male,"Diet and weight", "univariate_dietweight")
+
 # ---- Lifestyle ----
 final_lifestyle <- final_ALS_CTR_category_temp[final_ALS_CTR_category_temp$category == "lifestyle", , drop = FALSE] %>%
   mutate(`sub-category` = ifelse(is.na(`sub-subcategory`),`question in EN (ALS)`,`sub-category`))
+# only categorical
 dat_final_lifestyle_categorical = dat_final
-final_lifestyle_categorical = final_lifestyle %>% filter(is.na(`sub-subcategory`))
+final_lifestyle_categorical = final_lifestyle %>% filter(is.na(`sub-subcategory`) & col_classification == "categorical")
 dat_final_lifestyle_categorical[,colnames(dat_final) %in%
         make.names(final_lifestyle_categorical$`original question (ALS)`)] = lapply(dat_final_lifestyle_categorical[,colnames(dat_final) %in%
                                         make.names(final_lifestyle_categorical$`original question (ALS)`)],factor)
                                
-univar_lifestyle <- run_subcategory(final_lifestyle_categorical, 
+univar_lifestyle_cat <- run_subcategory(final_lifestyle_categorical, 
                                     dat_final_lifestyle_categorical, sub_col = "sub-category", sum_rows = FALSE, 
                                       adjust_var_name = adjust_var_name,na_check = FALSE,
                                       na_yes_check = FALSE)
+univar_lifestyle_cat_female = run_subcategory(final_lifestyle_categorical, 
+                                              dat_final_lifestyle_categorical[which_female,], 
+                                              sub_col = "sub-category", sum_rows = FALSE, 
+                                              adjust_var_name = NULL,na_check = FALSE,
+                                              na_yes_check = FALSE)
+univar_lifestyle_cat_male = run_subcategory(final_lifestyle_categorical, 
+                                              dat_final_lifestyle_categorical[which_male,], 
+                                              sub_col = "sub-category", sum_rows = FALSE, 
+                                              adjust_var_name = NULL,na_check = FALSE,
+                                              na_yes_check = FALSE)
 
+# binary or continuous
+dat_final_lifestyle_categorical = dat_final
+final_lifestyle_categorical = final_lifestyle %>% filter(is.na(`sub-subcategory`) & col_classification == "binary")
+dat_final_lifestyle_categorical[,colnames(dat_final) %in%
+                                  make.names(final_lifestyle_categorical$`original question (ALS)`)] = lapply(dat_final_lifestyle_categorical[,colnames(dat_final) %in%
+                                                                                                                                                make.names(final_lifestyle_categorical$`original question (ALS)`)],factor)
+univar_lifestyle <- run_subcategory(final_lifestyle_categorical, 
+                                    dat_final_lifestyle_categorical, sub_col = "sub-category", 
+                                    sum_rows = FALSE, 
+                                    adjust_var_name = adjust_var_name,na_check = FALSE,
+                                    na_yes_check = TRUE)
+univar_lifestyle_female = run_subcategory(final_lifestyle_categorical, 
+                                          dat_final_lifestyle_categorical[which_female,], 
+                                          sub_col = "sub-category", sum_rows = FALSE, 
+                                          adjust_var_name = NULL,na_check = FALSE,
+                                          na_yes_check = FALSE)[[1]]
+univar_lifestyle_male = run_subcategory(final_lifestyle_categorical, 
+                                          dat_final_lifestyle_categorical[which_male,], 
+                                          sub_col = "sub-category", sum_rows = FALSE, 
+                                          adjust_var_name = NULL,na_check = FALSE,
+                                          na_yes_check = FALSE)[[1]]
 
 univar_lifestyle_subcat = run_subcategory(final_lifestyle%>% filter(!is.na(`sub-subcategory`)),
                                           dat_final,sub_col = "sub-subcategory", sum_rows = FALSE, 
                                           adjust_var_name = adjust_var_name,na_check = FALSE,
                                           na_yes_check = TRUE,sum_higher = TRUE)
+univar_lifestyle_subcat_female = run_subcategory(final_lifestyle%>% filter(!is.na(`sub-subcategory`)),
+                                          dat_final[which_female,],sub_col = "sub-subcategory", sum_rows = FALSE, 
+                                          adjust_var_name = NULL,na_check = FALSE,
+                                          na_yes_check = TRUE,sum_higher = TRUE)[[1]]
+univar_lifestyle_subcat_male = run_subcategory(final_lifestyle%>% filter(!is.na(`sub-subcategory`)),
+                                                 dat_final[which_male,],sub_col = "sub-subcategory", sum_rows = FALSE, 
+                                                 adjust_var_name = NULL,na_check = FALSE,
+                                                 na_yes_check = TRUE,sum_higher = TRUE)[[1]]
 
 univar_lifestyle_kinder = list(
   run_univariate(dat_final[, c(make.names("Wie viele Kinder haben Sie?"), "status"), drop = FALSE],adjust_var_name = NULL),
   run_univariate(dat_final[, c(make.names("Wie viele Kinder haben Sie?"), "status"), drop = FALSE],adjust_var_name = adjust_var_name)
   )
+univar_lifestyle_kinder_female = run_univariate(dat_final[which_female, c(make.names("Wie viele Kinder haben Sie?"), "status"), drop = FALSE],
+                                                adjust_var_name = NULL)
+univar_lifestyle_kinder_male = run_univariate(dat_final[which_male, c(make.names("Wie viele Kinder haben Sie?"), "status"), drop = FALSE],
+                                                adjust_var_name = NULL)
 
 # combine and save
 univar_lifestyle_all <- do.call(rbind, Filter(Negate(is.null), list(univar_lifestyle$univar, 
+                                                                    univar_lifestyle_cat$univar,
                                                                     univar_lifestyle_subcat$univar,
                                                                     univar_lifestyle_kinder$univar)))
 univar_lifestyle_all_gender <- do.call(rbind, Filter(Negate(is.null), 
                                                          list(univar_lifestyle$univar_gender, 
+                                                              univar_lifestyle_cat$univar_gender,
                                                               univar_lifestyle_subcat$univar_gender,
                                                               univar_lifestyle_kinder$univar_gender)))
 save_univar_results(univar_lifestyle_all, univar_lifestyle_all_gender, "Lifestyle", "univariate_lifestyle")
+
+univar_lifestyle_all_female = do.call(rbind, Filter(Negate(is.null), list(univar_lifestyle_female, 
+                                                                          univar_lifestyle_cat_female$univar,
+                                                                          univar_lifestyle_subcat_female,
+                                                                          univar_lifestyle_kinder_female)))
+univar_lifestyle_all_male = do.call(rbind, Filter(Negate(is.null), list(univar_lifestyle_male, 
+                                                                          univar_lifestyle_cat_male$univar,
+                                                                          univar_lifestyle_subcat_male,
+                                                                          univar_lifestyle_kinder_male)))
+save_univar_results_gender(univar_lifestyle_all_female,univar_lifestyle_all_male,"Lifestyle", "univariate_lifestyle")
 
