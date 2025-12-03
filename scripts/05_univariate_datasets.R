@@ -93,7 +93,7 @@ writexl::write_xlsx(univar_preconditions_general, "data code output/univar_preco
 
 # 1.3: Lifestyle
 datasets <- list(
-  "Full sample" = univar_lifestyle_all_gender,
+  "Full sample" = univar_lifestyle_all,
   "Female" = univar_lifestyle_all_female,
   "Male" = univar_lifestyle_all_male
 )
@@ -131,11 +131,22 @@ univar_dietweight_general <- univar_dietweight_general %>%
 writexl::write_xlsx(univar_dietweight_general, "data code output/univar_dietweight_general.xlsx")
 
 # Stratify by full sample, female and male 
-univariate_all_together = do.call("rbind",list(univariate_nonmotor_general,
-                                                 univar_preconditions_general,
-                                                 univar_lifestyle_general,
-                                                 univar_healthcare_general,
-                                                 univar_dietweight_general))
+univariate_nonmotor_general = read_excel("data code output/univariate_nonmotor_general_new.xlsx")
+univar_preconditions_general = read_excel("data code output/univar_preconditions_general_new.xlsx")
+univar_lifestyle_general = read_excel("data code output/univar_lifestyle_general_new.xlsx")
+univar_healthcare_general = read_excel("data code output/univar_healthcare_general_new.xlsx")
+univar_dietweight_general = read_excel("data code output/univar_dietweight_general_new.xlsx")
+
+univariate_all_together = do.call("rbind",list(univariate_nonmotor_general %>% 
+                                                 mutate(question_type = "non-motor"),
+                                                 univar_preconditions_general  %>% 
+                                                 mutate(question_type = "pre-conditions"),
+                                                 univar_lifestyle_general %>%
+                                                 mutate(question_type = "lifestyle"),
+                                                 univar_healthcare_general %>%
+                                                 mutate(question_type = "healthcare"),
+                                                 univar_dietweight_general %>%
+                                                 mutate(question_type = "dietweight")))
 
 # -> Full sample
 univariate_all_fullsample = univariate_all_together %>% 

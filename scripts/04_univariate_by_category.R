@@ -15,86 +15,109 @@ univariate_model_new <- function(data_final, status_var = "status") {
   
   for (v in vars) {
     x <- data_final[[v]]
-    # Skip all NA or <2 unique
+    # Skip all NA or <2 unique (for numeric, <2 unique; for factor, need >=2 levels)
     if (all(is.na(x))) {
       safe_msg("Skipping '", v, "': all NA")
       next
     }
-    if (length(unique(na.omit(x))) < 2) {
-      safe_msg("Skipping '", v, "': < 2 unique non-NA values")
-      next
-    }
-    
-    #fmla <- as.formula(paste(status_var, "~", v,"+",0))
-    fmla <- as.formula(paste(status_var, "~", v))
-    
-    fit <- tryCatch(
-      glm(fmla, data = data_final, family = binomial),
-      error = function(e) {
-        safe_msg("Skipping '", v, "' due to glm error: ", e$message)
-        NULL
-      },
-      warning = function(w) {
-        # continue on warnings
-        invokeRestart("muffleWarning")
+    if (is.factor(x) || is.character(x)) {
+      levs <- levels(factor(x))
+      if (length(levs) < 2) {
+        safe_msg("Skipping '", v, "': < 2 levels")
+        next
       }
-    )
-    if (is.null(fit)) next
-    
-    coef_tab <- tryCatch(summary(fit)$coefficients, error = function(e) { safe_msg("coef extraction fail for ", v); NULL })
-    if (is.null(coef_tab)) next
-    
-    # remove intercept row
-    if ("(Intercept)" %in% rownames(coef_tab)) {
-      coef_no_int <- coef_tab[rownames(coef_tab) != "(Intercept)", , drop = FALSE]
+      # run one-vs-rest for each level
+      for (L in levs) {
+        tmp_df <- data_final
+        # create binary predictor: 1 when level == L, 0 otherwise (treat NA as NA)
+        tmp_df[[ "tmp_bin" ]] <- as.numeric(!is.na(tmp_df[[v]]) & tmp_df[[v]] == L)
+        # skip if all same
+        if (length(unique(na.omit(tmp_df$tmp_bin))) < 2) {
+          safe_msg("Skipping '", v, " (", L, ")': binary var has <2 unique values")
+          next
+        }
+        fmla <- as.formula(paste(status_var, "~ tmp_bin"))
+        fit <- tryCatch(glm(fmla, data = tmp_df, family = binomial), 
+                        error = function(e) { safe_msg("glm error for ", v, " (", L, "): ", e$message); NULL })
+        if (is.null(fit)) next
+        coef_tab <- tryCatch(summary(fit)$coefficients, error = function(e) { safe_msg("coef extraction fail for ", v, " (", L, ")"); NULL })
+        if (is.null(coef_tab)) next
+        # We expect row "(Intercept)" and "tmp_bin"
+        if (!"tmp_bin" %in% rownames(coef_tab)) {
+          safe_msg("No tmp_bin coef for ", v, " (", L, ")")
+          next
+        }
+        coef_row <- coef_tab["tmp_bin", , drop = FALSE]
+        # CI on logit scale via confint.default
+        ci_mat <- tryCatch(confint.default(fit, parm = "tmp_bin"), error = function(e) NULL) 
+        if (!is.null(ci_mat)) {
+          eff_CI_tmp <- exp(matrix(ci_mat, nrow = 1))
+          rownames(eff_CI_tmp) <- paste0(v, "=", L)
+        } else {
+          est <- coef_row[ , "Estimate"]
+          se  <- coef_row[ , "Std. Error"]
+          eff_CI_tmp <- exp(cbind(est - 1.96 * se, est + 1.96 * se))
+          rownames(eff_CI_tmp) <- paste0(v, "=", L)
+        }
+        # build output row
+        out <- as.data.frame(coef_row, stringsAsFactors = FALSE)
+        out$Variables <- paste0(v, "=", L)
+        out$Features  <- paste0(v, "=", L)
+        out$t_stat <- out$Estimate / out$`Std. Error`
+        rownames(out) <- NULL
+        
+        res_list[[ paste0(v, "___", L) ]] <- out
+        effCI_list[[ paste0(v, "___", L) ]] <- as.data.frame(eff_CI_tmp, stringsAsFactors = FALSE)
+      } # end levels
     } else {
-      coef_no_int <- coef_tab
-    }
-    if (nrow(coef_no_int) == 0) {
-      safe_msg("Skipping '", v, "': no non-intercept coefficients")
-      next
-    }
-    
-    rn <- rownames(coef_no_int)
-    
-    # try confint.default, fallback to Wald
-    ci_mat <- tryCatch(confint.default(fit), error = function(e) NULL)
-    if (!is.null(ci_mat)) {
-      if ("(Intercept)" %in% rownames(ci_mat)) {
-        ci_no_int <- ci_mat[rownames(ci_mat) != "(Intercept)", , drop = FALSE]
+      # numeric predictor: one model as usual
+      if (length(unique(na.omit(x))) < 2) {
+        safe_msg("Skipping numeric '", v, "': < 2 unique non-NA values")
+        next
+      }
+      fmla <- as.formula(paste(status_var, "~", v))
+      fit <- tryCatch(glm(fmla, data = data_final, family = binomial),
+                      error = function(e) { safe_msg("glm error for ", v, ": ", e$message); NULL })
+      if (is.null(fit)) next
+      coef_tab <- tryCatch(summary(fit)$coefficients, error = function(e) { safe_msg("coef extraction fail for ", v); NULL })
+      if (is.null(coef_tab)) next
+      # take the predictor row (not intercept)
+      rows_keep <- setdiff(rownames(coef_tab), "(Intercept)")
+      if (length(rows_keep) == 0) { safe_msg("No predictor row for ", v); next }
+      coef_row <- coef_tab[rows_keep, , drop = FALSE]
+      rn <- rows_keep
+      # CI
+      ci_mat <- tryCatch(confint.default(fit), error = function(e) NULL)
+      if (!is.null(ci_mat)) {
+        ci_no_int <- ci_mat[rownames(ci_mat) %in% rn, , drop = FALSE]
+        eff_CI_tmp <- exp(ci_no_int)
+        rownames(eff_CI_tmp) <- rn
       } else {
-        ci_no_int <- ci_mat
+        est_all <- coef_tab[, "Estimate"]
+        se_all  <- coef_tab[, "Std. Error"]
+        est_sub <- est_all[rn]
+        se_sub  <- se_all[rn]
+        lower <- exp(est_sub - 1.96 * se_sub)
+        upper <- exp(est_sub + 1.96 * se_sub)
+        eff_CI_tmp <- cbind(lower, upper)
+        rownames(eff_CI_tmp) <- rn
       }
-      eff_CI_tmp <- exp(ci_no_int)
-      rownames(eff_CI_tmp) <- rn
-    } else {
-      est_all <- coef_tab[, "Estimate"]
-      se_all  <- coef_tab[, "Std. Error"]
-      est_sub <- est_all[rownames(coef_no_int)]
-      se_sub  <- se_all[rownames(coef_no_int)]
-      lower <- exp(est_sub - 1.96 * se_sub)
-      upper <- exp(est_sub + 1.96 * se_sub)
-      eff_CI_tmp <- cbind(lower, upper)
-      rownames(eff_CI_tmp) <- rn
+      out <- as.data.frame(coef_row, stringsAsFactors = FALSE)
+      out$Variables <- rn
+      out$Features  <- rn
+      out$t_stat <- out$Estimate / out$`Std. Error`
+      rownames(out) <- NULL
+      res_list[[ v ]] <- out
+      effCI_list[[ v ]] <- as.data.frame(eff_CI_tmp, stringsAsFactors = FALSE)
     }
-    
-    tmp_df <- as.data.frame(coef_no_int, stringsAsFactors = FALSE)
-    tmp_df$Variables <- rn
-    tmp_df$Features <- rn
-    tmp_df$t_stat <- tmp_df$Estimate / tmp_df$`Std. Error`
-    rownames(tmp_df) <- NULL
-    
-    res_list[[v]] <- tmp_df
-    effCI_list[[v]] <- as.data.frame(eff_CI_tmp, stringsAsFactors = FALSE)
-  }
+  } # end variables loop
   
   if (length(res_list) == 0) {
-    warning("No predictors successfully modeled in univariate_model_new.")
+    warning("No predictors successfully modeled in univariate_model_onevsrest.")
     return(list(data.frame(), data.frame()))
   }
   
   df_combined <- do.call(rbind, res_list)
-  # Build effCI combined: include Variables column
   effCI_combined <- do.call(rbind, lapply(names(effCI_list), function(nm) {
     dfci <- effCI_list[[nm]]
     vars_here <- rownames(dfci)
@@ -103,7 +126,6 @@ univariate_model_new <- function(data_final, status_var = "status") {
     rownames(out) <- NULL
     out
   }))
-  # name CI columns consistently
   if (ncol(effCI_combined) >= 2) colnames(effCI_combined)[1:2] <- c("2.5 %", "97.5 %") else {
     colnames(effCI_combined)[1] <- "2.5 %" ; effCI_combined[["97.5 %"]] <- NA
   }
@@ -112,7 +134,7 @@ univariate_model_new <- function(data_final, status_var = "status") {
 
 # -----------------------------
 # 2) univariate_model_adjustment_new: same structure but formula includes adjust_var (e.g. sex)
-univariate_model_adjustment_new <- function(df, adjust_var, status_var = "status") {
+function(df, adjust_var, status_var = "status") {
   results <- list()
   effCI <- list()
   preds <- setdiff(names(df), c(status_var, adjust_var, "status2"))
@@ -120,47 +142,76 @@ univariate_model_adjustment_new <- function(df, adjust_var, status_var = "status
   for (var in preds) {
     x <- df[[var]]
     if (all(is.na(x))) { safe_msg("Skipping '", var, "': all NA"); next }
-    if (length(unique(na.omit(x))) < 2) { safe_msg("Skipping '", var, "': < 2 unique non-NA"); next }
-    
-    #f <- as.formula(paste(status_var, "~", var, "+", adjust_var,"+",0))
-    f <- as.formula(paste(status_var, "~", var, "+", adjust_var))
-    fit <- tryCatch(glm(f, data = df, family = binomial), error = function(e) { safe_msg("GLM error for ", var, ": ", e$message); NULL })
-    if (is.null(fit)) next
-    
-    coef_tab <- summary(fit)$coefficients
-    # keep predictor-related rows only (not intercept or adjust_var)
-    rows_keep <- setdiff(rownames(coef_tab), c("(Intercept)", adjust_var))
-    coef_sub <- coef_tab[rows_keep, , drop = FALSE]
-    if (nrow(coef_sub) == 0) next
-    
-    rn <- rownames(coef_sub)
-    ci_all <- tryCatch(confint.default(fit), error = function(e) NULL)
-    if (!is.null(ci_all)) {
-      ci_sub <- ci_all[rownames(ci_all) %in% rn, , drop = FALSE]
-      ci_exp <- exp(ci_sub)
+    if (is.factor(x) || is.character(x)) {
+      levs <- levels(factor(x))
+      if (length(levs) < 2) { safe_msg("Skipping '", var, "': < 2 levels"); next }
+      for (L in levs) {
+        tmp <- df
+        tmp$tmp_bin <- as.numeric(!is.na(tmp[[var]]) & tmp[[var]] == L)
+        if (length(unique(na.omit(tmp$tmp_bin))) < 2) {
+          safe_msg("Skipping '", var, " (", L, ")': binary var has <2 unique values"); next
+        }
+        f <- as.formula(paste(status_var, "~ tmp_bin +", adjust_var))
+        fit <- tryCatch(glm(f, data = tmp, family = binomial), error = function(e) { safe_msg("GLM error for ", var, " (", L, "): ", e$message); NULL })
+        if (is.null(fit)) next
+        coef_tab <- summary(fit)$coefficients
+        if (!"tmp_bin" %in% rownames(coef_tab)) { safe_msg("No tmp_bin coef for ", var, " (", L, ")"); next }
+        coef_row <- coef_tab["tmp_bin", , drop = FALSE]
+        rn <- paste0(var, "=", L)
+        # CI
+        ci_all <- tryCatch(confint.default(fit, parm = "tmp_bin"), error = function(e) NULL)
+        if (!is.null(ci_all)) {
+          ci_exp <- exp(matrix(ci_all, nrow = 1))
+          rownames(ci_exp) <- rn
+        } else {
+          est <- coef_row[, "Estimate"]; se <- coef_row[, "Std. Error"]
+          ci_exp <- cbind(exp(est - 1.96 * se), exp(est + 1.96 * se))
+          rownames(ci_exp) <- rn
+        }
+        df_out <- as.data.frame(coef_row, stringsAsFactors = FALSE)
+        df_out$Variables <- rn
+        df_out$Features <- rn
+        df_out$t_stat <- df_out$Estimate / df_out$`Std. Error`
+        results[[ paste0(var, "___", L) ]] <- df_out
+        effCI[[ paste0(var, "___", L) ]] <- as.data.frame(ci_exp, stringsAsFactors = FALSE)
+      } # end levels
     } else {
-      est <- coef_sub[, "Estimate"]
-      se  <- coef_sub[, "Std. Error"]
-      ci_exp <- cbind(exp(est - 1.96 * se), exp(est + 1.96 * se))
-      rownames(ci_exp) <- rn
+      # numeric: single adjusted model
+      if (length(unique(na.omit(x))) < 2) { safe_msg("Skipping '", var, "': < 2 unique non-NA"); next }
+      f <- as.formula(paste(status_var, "~", var, "+", adjust_var))
+      fit <- tryCatch(glm(f, data = df, family = binomial), error = function(e) { safe_msg("GLM error for ", var, ": ", e$message); NULL })
+      if (is.null(fit)) next
+      coef_tab <- summary(fit)$coefficients
+      rows_keep <- setdiff(rownames(coef_tab), c("(Intercept)", adjust_var))
+      if (length(rows_keep) == 0) next
+      coef_sub <- coef_tab[rows_keep, , drop = FALSE]
+      rn <- rows_keep
+      ci_all <- tryCatch(confint.default(fit), error = function(e) NULL)
+      if (!is.null(ci_all)) {
+        ci_sub <- ci_all[rownames(ci_all) %in% rn, , drop = FALSE]
+        ci_exp <- exp(ci_sub)
+      } else {
+        est <- coef_sub[, "Estimate"]
+        se  <- coef_sub[, "Std. Error"]
+        ci_exp <- cbind(exp(est - 1.96 * se), exp(est + 1.96 * se))
+        rownames(ci_exp) <- rn
+      }
+      df_out <- as.data.frame(coef_sub, stringsAsFactors = FALSE)
+      df_out$Variables <- rn
+      df_out$Features <- rn
+      df_out$t_stat <- df_out$Estimate / df_out$`Std. Error`
+      results[[ var ]] <- df_out
+      effCI[[ var ]] <- as.data.frame(ci_exp, stringsAsFactors = FALSE)
     }
-    
-    df_out <- as.data.frame(coef_sub, stringsAsFactors = FALSE)
-    df_out$Variables <- rn
-    df_out$Features <- rn
-    df_out$t_stat <- df_out$Estimate / df_out$`Std. Error`
-    
-    results[[var]] <- df_out
-    effCI[[var]] <- as.data.frame(ci_exp, stringsAsFactors = FALSE)
   }
   
   if (length(results) == 0) {
-    warning("No predictors successfully modeled in univariate_model_adjustment_new.")
+    warning("No predictors successfully modeled in univariate_model_onevsrest_adjust.")
     return(list(data.frame(), data.frame()))
   }
   df_res <- do.call(rbind, results)
   effCI_all <- do.call(rbind, lapply(names(effCI), function(nm) {
-    dfci <- effCI[[nm]] ; dfci$Variables <- rownames(dfci); rownames(dfci) <- NULL; dfci
+    dfci <- effCI[[nm]]; dfci$Variables <- rownames(dfci); rownames(dfci) <- NULL; dfci
   }))
   if (ncol(effCI_all) >= 2) colnames(effCI_all)[1:2] <- c("2.5 %", "97.5 %") else { colnames(effCI_all)[1] <- "2.5 %"; effCI_all[["97.5 %"]] <- NA }
   return(list(df_res, effCI_all))
@@ -271,7 +322,16 @@ run_subcategory <- function(final_cat_df, dat_final, sub_col = "sub-category",
     temp_df <- final_cat_df[final_cat_df[[sub_col]] == sc, , drop = FALSE]
     # columns in dat_final matching these original question DE names (make.names)
     selected_names <- make.names(temp_df$`original question (ALS)`)
-    keep_idx <- which(colnames(dat_final) %in% selected_names)
+    selected_names = ifelse(grepl("Wie.ist.aktuell.Ihr.Partnerschaftsstatus.",selected_names),
+                            "Wie.ist.aktuell.Ihr.Partnerschaftsstatus..",
+                            ifelse(grepl("Rauchen.Sie.aktuell.oder.haben.Sie.jemals.in.Ihrem.Leben.regelmäßig.Zigaretten..oder.Zigarren.etc...geraucht.",selected_names),
+                                         "Rauchen.Sie.aktuell.oder.haben.Sie.jemals.in.Ihrem.Leben.regelmäßig.Zigaretten..oder.Zigarren.etc...geraucht..",
+                            ifelse(grepl("Bitte.beschreiben.Sie.das.Maß.an.körperlicher.Aktivität.im.Rahmen.der.in.Ihrem.Leben.durchgeführten.sportlichen.Aktivitäten.",selected_names),
+                                   "Bitte.beschreiben.Sie.das.Maß.an.körperlicher.Aktivität.im.Rahmen.der.in.Ihrem.Leben.durchgeführten.sportlichen.Aktivitäten..",
+                                   ifelse(grepl("Bitte.beschreiben.Sie.das.Maß.an.körperlicher.Aktivität.im.Rahmen.Ihrer.beruflichen.Tätigkeit.",selected_names),
+                                          "Bitte.beschreiben.Sie.das.Maß.an.körperlicher.Aktivität.im.Rahmen.Ihrer.beruflichen.Tätigkeit..",selected_names))))
+    #selected_names <- make.names(temp_df$`original question (ALS)`)
+     keep_idx <- which(colnames(dat_final) %in% selected_names)
     if (length(keep_idx) == 0) {
       skipped_vars <- c(skipped_vars, paste0(sc, " (no matching cols)"))
       next
@@ -302,9 +362,7 @@ run_subcategory <- function(final_cat_df, dat_final, sub_col = "sub-category",
     if(sum_higher){
       counts <- apply(dat_sub[, 1:(ncol(dat_sub)-2), drop = FALSE], 1, function(x) 
       {sum(x)})
-      print(counts)
       counts = ifelse(counts  > 0, 1, 0)
-      print(counts)
       dat_sub2 <- data.frame(subcat = counts, status = dat_sub[, ncol(dat_sub)], status2 = dat_sub$status2)
       colnames(dat_sub2)[1] <- "subcat"
       res <- run_univariate(dat_sub2, adjust_var_name = NULL)
@@ -638,7 +696,7 @@ univar_preconditions_all <- do.call(rbind, Filter(Negate(is.null), list(univar_p
                                                                         univar_preconditions_subcat$univar)))
 univar_preconditions_all_gender <- do.call(rbind, Filter(Negate(is.null), 
                                                          list(univar_preconditions$univar_gender, 
-                                                              univar_preconditions_subcat$univar_genderunivar_diff_subcat$univar_gender)))
+                                                              univar_preconditions_subcat$univar_gender)))
 save_univar_results(univar_preconditions_all, univar_preconditions_all_gender, "pre-existing conditions", "univariate_preexisting")
 
 
@@ -674,12 +732,21 @@ final_lifestyle <- final_ALS_CTR_category_temp[final_ALS_CTR_category_temp$categ
 dat_final_lifestyle_categorical = dat_final
 final_lifestyle_categorical = final_lifestyle %>% filter(is.na(`sub-subcategory`) & col_classification == "categorical")
 dat_final_lifestyle_categorical[,colnames(dat_final) %in%
-        make.names(final_lifestyle_categorical$`original question (ALS)`)] = lapply(dat_final_lifestyle_categorical[,colnames(dat_final) %in%
-                                        make.names(final_lifestyle_categorical$`original question (ALS)`)],factor)
+                                  c(make.names(final_lifestyle_categorical$`original question (ALS)`),
+                                    "Wie.ist.aktuell.Ihr.Partnerschaftsstatus..",
+                                    "Bitte.beschreiben.Sie.das.Maß.an.körperlicher.Aktivität.im.Rahmen.der.in.Ihrem.Leben.durchgeführten.sportlichen.Aktivitäten..",
+                                    "Bitte.beschreiben.Sie.das.Maß.an.körperlicher.Aktivität.im.Rahmen.Ihrer.beruflichen.Tätigkeit..",
+                                    "Rauchen.Sie.aktuell.oder.haben.Sie.jemals.in.Ihrem.Leben.regelmäßig.Zigaretten..oder.Zigarren.etc...geraucht.")] = lapply(dat_final_lifestyle_categorical[,colnames(dat_final) %in%
+                                        c(make.names(final_lifestyle_categorical$`original question (ALS)`),
+                                          "Wie.ist.aktuell.Ihr.Partnerschaftsstatus..",
+                                          "Bitte.beschreiben.Sie.das.Maß.an.körperlicher.Aktivität.im.Rahmen.der.in.Ihrem.Leben.durchgeführten.sportlichen.Aktivitäten..",
+                                          "Bitte.beschreiben.Sie.das.Maß.an.körperlicher.Aktivität.im.Rahmen.Ihrer.beruflichen.Tätigkeit..",
+                                          "Rauchen.Sie.aktuell.oder.haben.Sie.jemals.in.Ihrem.Leben.regelmäßig.Zigaretten..oder.Zigarren.etc...geraucht.")],factor)
                                
 univar_lifestyle_cat <- run_subcategory(final_lifestyle_categorical, 
-                                    dat_final_lifestyle_categorical, sub_col = "sub-category", sum_rows = FALSE, 
-                                      adjust_var_name = adjust_var_name,na_check = FALSE,
+                                    dat_final_lifestyle_categorical, sub_col = "sub-category", 
+                                    sum_rows = FALSE, adjust_var_name = adjust_var_name,
+                                    na_check = FALSE,
                                       na_yes_check = FALSE)
 univar_lifestyle_cat_female = run_subcategory(final_lifestyle_categorical, 
                                               dat_final_lifestyle_categorical[which_female,], 
@@ -740,12 +807,12 @@ univar_lifestyle_kinder_male = run_univariate(dat_final[which_male, c(make.names
 univar_lifestyle_all <- do.call(rbind, Filter(Negate(is.null), list(univar_lifestyle$univar, 
                                                                     univar_lifestyle_cat$univar,
                                                                     univar_lifestyle_subcat$univar,
-                                                                    univar_lifestyle_kinder$univar)))
+                                                                    univar_lifestyle_kinder[[1]])))
 univar_lifestyle_all_gender <- do.call(rbind, Filter(Negate(is.null), 
                                                          list(univar_lifestyle$univar_gender, 
                                                               univar_lifestyle_cat$univar_gender,
                                                               univar_lifestyle_subcat$univar_gender,
-                                                              univar_lifestyle_kinder$univar_gender)))
+                                                              univar_lifestyle_kinder[[2]])))
 save_univar_results(univar_lifestyle_all, univar_lifestyle_all_gender, "Lifestyle", "univariate_lifestyle")
 
 univar_lifestyle_all_female = do.call(rbind, Filter(Negate(is.null), list(univar_lifestyle_female, 
