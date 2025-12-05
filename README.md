@@ -11,9 +11,6 @@ Explanation of what happens in each script:
 * Script 06, forest plots of univariate analyses per category.
 * Script 07, statistics of clinical factors (diff in bulbar/spinal, age, sex, age at onset, ...) for the demographics table.
 * Script 08, analyses of open answers of non-motor symptoms.
-  
-
-To update:
-* Script 08, it's called boxplots, but performes both boxplots for continuous/categorical variables, as well as, some of the barplots in the manuscript.
-* Script 09, there are two files, one performing the ssame as 06 but stratified by gender, and another one checks for enrichment of answers in ALS bulbar/spinal (prob not relevant for you)
-* Script 10, timeline plots of weight, BMI
+* Script 09, barplots visualisations for several categories.
+* Script 10, timeline plots for healthcare visits and weight.
+* Script 11, spinal/bulbar onset univariate analyses.
