@@ -190,6 +190,7 @@ ALS_open_answers$date <- format(as.Date(
   sapply(seq_len(nrow(data_first_symptom)), function(i) get_oldest_date(data_first_symptom[i, ])),
   origin = "1970-01-01"
 ),"%Y")
+
 extract_year <- function(date_string) {
   year <- str_extract(date_string, "\\d{4}")  # Extracts the 4-digit year
   return(as.numeric(year))  # Convert to numeric
@@ -200,6 +201,7 @@ seit_wann_cols <- grep("\\[Seit wann\\?\\]", names(ALS_open_answers), value = TR
 for (col in seit_wann_cols) {
   ALS_open_answers[[paste0("diff_", col)]] <-  ALS_open_answers$date - extract_year(ALS_open_answers[[col]])
 }
+
 #which_symptoms_cols <- grep("\\[Welche Veränderung\\?\\]", names(ALS_open_answers_nonmotor), value = TRUE)
 
 # ALS_open_answers_nonmotor_long = ALS_open_answers_nonmotor[c(1,3,5,7,9)] %>%
@@ -226,7 +228,7 @@ ALS_open_answers_neuromuscular[, relevant_cols] <- lapply(ALS_open_answers[, rel
                                                    function(x) ifelse(x %in% neuromuscular_questions, x, NA))
 for(i in seq_along(relevant_cols)) {
   main_col <- relevant_cols[i]
-  related_col <- main_col + 1  # assuming related column is right after main
+  related_col <- main_col + 1  
   related_col2 = c(12,13,14,15,16)[i]
   ALS_open_answers_neuromuscular[[related_col]] <- ifelse(
     is.na(ALS_open_answers_neuromuscular[[main_col]]),
@@ -240,7 +242,7 @@ for(i in seq_along(relevant_cols)) {
   )
 }
 
-# Keep only rows with at least one sensory answer
+# Keep only rows with at least one neuromuuscular answer
 ALS_open_answers_neuromuscular <- ALS_open_answers_neuromuscular %>%
   filter(rowSums(!is.na(across(all_of(relevant_cols)))) > 0)
 

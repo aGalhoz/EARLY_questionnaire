@@ -37,7 +37,7 @@ forest_plot_all <- function(data,subcategory_bol = TRUE){
       strip.text = element_text(size = 17)        # Facet label size
     ) 
   #+
-  #xlim(-0.7,1.8)
+  xlim(-3,3.2)
   #+xlim(min(data$`log(2.5% [OR])`) - 10,max(data$`log(97.5% [OR])`)+10)
   if(subcategory_bol){
     g <- g + 
@@ -57,7 +57,7 @@ data_use <- univariate_nonmotor_general %>%
 
 p = forest_plot_all(data_use,subcategory_bol = FALSE)
 
-pdf(file = "plots/forest_nonmotor_main.pdf",height = 7,width = 8)
+pdf(file = "plots/forest_nonmotor_main.pdf",height = 6.5,width = 8)
 p
 dev.off()
 
@@ -81,24 +81,34 @@ data_use <- univariate_nonmotor_general %>%
 
 p = forest_plot_all(data_use[1:36,],subcategory_bol = TRUE)
 
-pdf(file = "plots/forest_nonmotor_subcategories1.pdf",height = 7,width = 8)
+pdf(file = "plots/forest_nonmotor_subcategories1.pdf",height = 6.5,width = 9)
 p
 dev.off()
 
 p = forest_plot_all(data_use[37:72,],subcategory_bol = TRUE)
 
-pdf(file = "plots/forest_nonmotor_subcategories2.pdf",height = 7,width = 8)
+pdf(file = "plots/forest_nonmotor_subcategories2.pdf",height = 6.5,width = 9)
 p
 dev.off()
 
 ## -> Pre-existing comorbidies (main)
-data_use <- univar_preconditions_general %>%
-  filter(`Main category` == `Specific category`) %>%
+order <- univar_preconditions_general %>%
+  filter(`Main category` == `Specific category` | `Main category` == "",type == "Full sample") %>%
   arrange(`P-value`)
+data_use <- univar_preconditions_general %>%
+  filter(`Main category` == `Specific category` | `Main category` == "") %>%
+  mutate(`Main category` = factor(`Main category`,
+                                  levels = order$`Main category`)) %>%
+  arrange(`Main category`) 
+
+data_use$`log(2.5% [OR])` = ifelse(is.na(data_use$`log(2.5% [OR])`),-Inf,data_use$`log(2.5% [OR])`)
+  data_use$`Specific category` = ifelse(data_use$`Specific category` == "Endocrine, nutritional and metabolic diseases",
+                                  "Endocrine, nutritional and \nmetabolic diseases",
+                                  data_use$`Specific category`)
 
 p = forest_plot_all(data_use,subcategory_bol = FALSE)
 
-pdf(file = "plots/forest_preexisting_main.pdf",height = 6,width = 9)
+pdf(file = "plots/forest_preexisting_main.pdf",height = 6.5,width = 9)
 p
 dev.off()
 

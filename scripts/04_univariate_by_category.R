@@ -11,7 +11,7 @@ univariate_model_new <- function(data_final, status_var = "status") {
   res_list <- list()
   effCI_list <- list()
   
-  vars <- setdiff(colnames(data_final), c(status_var, "status2"))
+  vars <- setdiff(colnames(data_final), c(status_var, "status2","Bitte.geben.Sie.Ihr.Geschlecht.an."))
   
   for (v in vars) {
     x <- data_final[[v]]
@@ -134,7 +134,7 @@ univariate_model_new <- function(data_final, status_var = "status") {
 
 # -----------------------------
 # 2) univariate_model_adjustment_new: same structure but formula includes adjust_var (e.g. sex)
-function(df, adjust_var, status_var = "status") {
+univariate_model_adjustment_new <- function(df, adjust_var, status_var = "status") {
   results <- list()
   effCI <- list()
   preds <- setdiff(names(df), c(status_var, adjust_var, "status2"))

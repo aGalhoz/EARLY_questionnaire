@@ -401,6 +401,9 @@ final_summary <- build_final_summary(
   pos_CTR_common = pos_CTR_common
 )
 
+final_summary_ALS = data.frame(original_question = colnames(ALS_specific),
+                               fraction = sum_ALS_spec$frac)
+
 final_summary$Name_ALS_DE = colnames(split_cols$ALS_common)
 final_summary$Name_CTR_DE = colnames(split_cols$CTR_common)
 
@@ -420,6 +423,7 @@ writexl::write_xlsx(
 )
 
 writexl::write_xlsx(final_summary,"data code output/Questionnaire_summary.xlsx")
+writexl::write_xlsx(final_summary_ALS,"data code output/Questionnaire_ALS_summary.xlsx")
 
 info_ML <- read_excel("data code output/final_ALS_CTR_questionnaire_new_deprecated.xlsx")
 
