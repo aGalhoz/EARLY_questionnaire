@@ -28,7 +28,8 @@ cran_pkgs <- c(
   "emmeans",
   "lme4",
   "RColorBrewer",
-  "wesanderson"
+  "wesanderson",
+  "car"
 )
 
 install_if_missing(cran_pkgs) 
@@ -63,3 +64,4 @@ library(wesanderson)
 library(ggforestplot)  
 library(plyr)  
 library(EnvStats)
+library(car)

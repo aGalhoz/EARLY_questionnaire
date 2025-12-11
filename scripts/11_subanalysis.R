@@ -113,8 +113,8 @@ healthcare_visit_spinal_bulbar = map_dfr(c("neurology_visit","speech_therapy_vis
                                             ~ run_multinom_for_item(dat_final_spinalbulbar, .x))
 
 # check if there is any significance in the slipped disc report
-dat_final_spinalbulbar$slipped_disc = ifelse(dat_final$Welche.Krankheits.des.Muskel.Skelett.Systems.liegt.bzw..lag.vor.und.seit.wann...Bandscheibenvorfall. == "Ja","Yes","No")
-dat_final_spinalbulbar$musculosketel_disease = apply(data_combined[,grep("Muskel.Skelett",names(data_combined))],1,
+dat_final_spinalbulbar$slipped_disc = ifelse(dat_final_tmp$Welche.Krankheits.des.Muskel.Skelett.Systems.liegt.bzw..lag.vor.und.seit.wann...Bandscheibenvorfall. == "Ja","Yes","No")
+dat_final_spinalbulbar$musculosketel_disease = apply(dat_final_tmp[,grep("Muskel.Skelett",names(dat_final_tmp))],1,
         function(z) ifelse(any(z %in% "Ja"),"Yes","No"))
 
 preexisting_conditions_spinal_bulbar = map_dfr(c("slipped_disc","musculosketel_disease"),
@@ -175,7 +175,11 @@ weight_diagnosis_now = data_ALS_weight$`Bitte geben Sie Ihr Gewicht an. [Bei Er
 
 dat_final_spinalbulbar$weight_loss = data_weight_timeline %>% filter(time == "ten_y") %>% pull(Weight) - data_weight_timeline %>% filter(time == "now") %>% pull(Weight)
 dat_final_spinalbulbar$weight_now = data_weight_timeline %>% filter(time == "now") %>% pull(Weight)
-weight_now_spinal_bulbar = map_dfr(c("weight_now"), ~ run_multinom_for_item(dat_final_spinalbulbar, .x))
+dat_final_spinalbulbar$weight_1y = data_weight_timeline %>% filter(time == "one_y") %>% pull(Weight)
+dat_final_spinalbulbar$weight_5y = data_weight_timeline %>% filter(time == "five_y") %>% pull(Weight)
+dat_final_spinalbulbar$weight_10y = data_weight_timeline %>% filter(time == "ten_y") %>% pull(Weight)
+weight_now_spinal_bulbar = map_dfr(c("weight_now","weight_1y","weight_5y","weight_10y"),
+                                   ~ run_multinom_for_item(dat_final_spinalbulbar, .x))
 
 wilcox.test(data_weight_timeline %>% filter(time == "now" & status == 1) %>% pull(Weight) ~ status_aux, data = subset(dat_final_spinalbulbar, status2 == 1))
 wilcox.test(weight_loss ~ sex, data = subset(dat_final_spinalbulbar, status2 == 1))

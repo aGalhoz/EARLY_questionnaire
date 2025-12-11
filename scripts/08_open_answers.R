@@ -69,49 +69,6 @@ EARLY_AllAnswers$symptom_specific_PL <- ifelse(
   EARLY_AllAnswers$symptom_specific_PL
 )
 
-# --- Frequency tables function ---
-get_freq_table <- function(symptom_column) {
-  as.data.frame(table(symptom_column)) %>% arrange(desc(Freq))
-}
-
-freq_general <- get_freq_table(EARLY_AllAnswers$symptom_general_PL)
-freq_specific <- get_freq_table(EARLY_AllAnswers$symptom_specific_PL)
-
-# --- Save frequency tables ---
-write_xlsx(freq_general, "data code output/freq_general_symptoms_PL.xlsx")
-write_xlsx(freq_specific, "data code output/freq_specific_symptoms_PL.xlsx")
-
-## Visualisation of open answers
-plot_pie <- function(freq_df, title, colors = NULL, file = NULL) {
-  if(is.null(colors)) {
-    nb.cols <- nrow(freq_df)
-    colors <- colorRampPalette(brewer.pal(8, "Set2"))(nb.cols)
-  }
-  p <- ggplot(freq_df, aes(x="", y=Freq, fill=Var1)) +
-    geom_bar(width=1, stat="identity") +
-    scale_fill_manual(values = colors) +
-    geom_text(aes(label = Freq), position = position_stack(vjust=0.5)) +
-    coord_polar(theta = "y") +
-    ggtitle(title) +
-    theme_void()
-  
-  if(!is.null(file)) pdf(file, width=6, height=6); print(p); if(!is.null(file)) dev.off()
-  return(p)
-}
-
-freq_general$Var1 <- factor(freq_general$symptom_column,levels = freq_general$symptom_column)
-plot_pie(freq_general, "General Symptoms", file = "plots/pie_generalsymptoms.pdf")
-
-neuromuscular_freq <- as.data.frame(table(c(EARLY_AllAnswers[EARLY_AllAnswers$symptom_general_PL == "neuro-motor",]$`Symptom/Syndrome_General_1`))) %>% 
-  arrange(desc(Freq))
-neuromuscular_freq$Var1 <- factor(neuromuscular_freq$Var1,levels = neuromuscular_freq$Var1)
-plot_pie(neuromuscular_freq, "Neuro-motor", file = "plots/pie_neuromuscular.pdf")
-
-sensory_freq <- as.data.frame(table(c(EARLY_AllAnswers[EARLY_AllAnswers$symptom_general_PL == "Sensory and vestibular",]$`Symptom/Syndrome_General_1`))) %>% 
-  arrange(desc(Freq))
-sensory_freq$Var1 <- factor(sensory_freq$Var1,levels = sensory_freq$Var1)
-plot_pie(sensory_freq, "Sensory and vestibular", file = "plots/pie_sensory.pdf")
-
 # open answers ALS
 # --- Function to extract numeric year from date strings ---
 extract_year <- function(date_str) {
@@ -202,15 +159,16 @@ for (col in seit_wann_cols) {
   ALS_open_answers[[paste0("diff_", col)]] <-  ALS_open_answers$date - extract_year(ALS_open_answers[[col]])
 }
 
-#which_symptoms_cols <- grep("\\[Welche Veränderung\\?\\]", names(ALS_open_answers_nonmotor), value = TRUE)
+ALS_open_answers_tmp = ALS_open_answers
 
-# ALS_open_answers_nonmotor_long = ALS_open_answers_nonmotor[c(1,3,5,7,9)] %>%
-#   pivot_longer(cols = all_of(which_symptoms_cols), 
-#                names_to = "symptom", 
-#                values_to = "which_symptom") %>%
-#   mutate(change_year = as.numeric(str_extract(change_year, "\\d{4}"))) %>%
-#   mutate(year_difference = change_year - birth_year)  # Compute difference
-
+for (i in 1:5) {
+  for (j in 1:nrow(ALS_open_answers_tmp)) {
+    ALS_open_answers_tmp[j,2*(i-1)+1] = ifelse(ALS_open_answers_tmp[j,11+i]<0,
+                                               NA,
+                                               ALS_open_answers_tmp[j,2*(i-1)+1])
+  }
+}
+ 
 neuromuscular_questions <- EARLY_AllAnswers %>%
   filter(symptom_general_PL == "neuro-motor") %>%
   pull(Answer)
@@ -223,8 +181,8 @@ sensory_questions <- EARLY_AllAnswers %>%
 relevant_cols <- c(1,3,5,7,9)  # columns with open answers
 
 # Subset for neuromuscular
-ALS_open_answers_neuromuscular <- ALS_open_answers
-ALS_open_answers_neuromuscular[, relevant_cols] <- lapply(ALS_open_answers[, relevant_cols], 
+ALS_open_answers_neuromuscular <- ALS_open_answers_tmp
+ALS_open_answers_neuromuscular[, relevant_cols] <- lapply(ALS_open_answers_tmp[, relevant_cols], 
                                                    function(x) ifelse(x %in% neuromuscular_questions, x, NA))
 for(i in seq_along(relevant_cols)) {
   main_col <- relevant_cols[i]
@@ -248,8 +206,8 @@ ALS_open_answers_neuromuscular <- ALS_open_answers_neuromuscular %>%
 
 # Subset for sensory
 sensory_cols <- c(1,3,5,7,9)  # columns with sensory answers
-ALS_open_answers_sensory <- ALS_open_answers
-ALS_open_answers_sensory[, sensory_cols] <- lapply(ALS_open_answers[, sensory_cols], 
+ALS_open_answers_sensory <- ALS_open_answers_tmp
+ALS_open_answers_sensory[, sensory_cols] <- lapply(ALS_open_answers_tmp[, sensory_cols], 
                                                   function(x) ifelse(x %in% sensory_questions, x, NA))
 for(i in seq_along(sensory_cols)) {
   main_col <- sensory_cols[i]
@@ -305,8 +263,8 @@ compute_summary <- function(x, symptom_name) {
 
 # Compute summaries (positive diff means year_onset > year_answer, answer was pre-onset)
 # -> changing values to become more intuitive: negative means before onset, positve after onset
-neuromuscular_df <- compute_summary((-1)*diff_neuromuscular, "neuro-motor")
-sensory_df       <- compute_summary((-1)*diff_sensory, "Sensory/vestibular")
+neuromuscular_df <- compute_summary(diff_neuromuscular, "neuro-motor")
+sensory_df       <- compute_summary(diff_sensory, "Sensory/vestibular")
 
 combined_summary <- bind_rows(neuromuscular_df, sensory_df)
 combined_summary
@@ -323,9 +281,8 @@ df = tibble(
 ) %>%
   mutate(
     period = case_when(
-      years < 0  ~ "Pre-onset",
       years == 0 ~ "Onset",
-      years > 0  ~ "Post-onset"
+      years < 0  ~ "Pre-onset"
     ),
     period = factor(period, levels = c("Pre-onset", "Onset", "Post-onset"))
   ) %>%
@@ -345,11 +302,11 @@ plot_neuro_sensory <- ggplot(df, aes(x = years, fill = symptom)) +
   scale_fill_manual(values = palette) +
   scale_color_manual(values = palette) +  
   scale_x_continuous(name = "Years",
-                     breaks = c(-30, -20, -10, 0, 10, 20, 30),
-                     labels = c("30", "20", "10", "Onset", "10", "20", "30")) +
+                     breaks = c(-30, -20, -10, 0,1),
+                     labels = c("30", "20", "10", "Onset","")) +
   # Text annotations for clarity
   annotate("text", x = -25, y = 0.03, label = "Pre-onset", size = 4.35, color = "gray30", fontface = "italic") +
-  annotate("text", x = 27, y = 0.03, label = "Post-onset", size = 4.35, color = "gray30", fontface = "italic") +
+ # annotate("text", x = 27, y = 0.03, label = "Post-onset", size = 4.35, color = "gray30", fontface = "italic") +
   # Labels
   labs(
     title = "Time distribution of symptoms",
@@ -372,6 +329,74 @@ plot_neuro_sensory <- ggplot(df, aes(x = years, fill = symptom)) +
 pdf("plots/distribution_neuro_motor.pdf",width = 8,height = 6)
 plot_neuro_sensory
 dev.off()
+
+# --- Frequency tables function ---
+get_freq_table <- function(symptom_column) {
+  as.data.frame(table(symptom_column)) %>% arrange(desc(Freq))
+}
+
+# how many IDs answered
+ALS_open_answers_tmp %>%
+  filter(rowSums(!is.na(across(all_of(relevant_cols)))) > 0)
+
+ALS_open_answers_tmp %>%
+  filter(rowSums(!is.na(across(all_of(relevant_cols)))) >= 2)
+
+new_answers = c(ALS_open_answers_tmp[,1] %>% pull(),
+                ALS_open_answers_tmp[,3] %>% pull(),
+                ALS_open_answers_tmp[,5] %>% pull(),
+                ALS_open_answers_tmp[,7] %>% pull(),
+                ALS_open_answers_tmp[,9] %>% pull())
+EARLY_AllAnswers_new = EARLY_AllAnswers
+EARLY_AllAnswers_new = EARLY_AllAnswers_new %>%
+  filter(Answer %in% na.omit(new_answers))
+freq_general <- get_freq_table(EARLY_AllAnswers_new$symptom_general_PL)
+freq_specific <- get_freq_table(EARLY_AllAnswers_new$symptom_specific_PL)
+
+# --- Save frequency tables ---
+write_xlsx(freq_general, "data code output/freq_general_symptoms_PL.xlsx")
+write_xlsx(freq_specific, "data code output/freq_specific_symptoms_PL.xlsx")
+
+## Visualisation of open answers
+plot_pie <- function(freq_df, title, colors = NULL, file = NULL) {
+  if(is.null(colors)) {
+    nb.cols <- nrow(freq_df)
+    colors <- colorRampPalette(brewer.pal(8, "Set2"))(nb.cols)
+  }
+  p <- ggplot(freq_df, aes(x="", y=Freq, fill=Var1)) +
+    geom_bar(width=1, stat="identity") +
+    scale_fill_manual(values = colors) +
+    geom_text(aes(label = Freq), position = position_stack(vjust=0.5)) +
+    coord_polar(theta = "y") +
+    ggtitle(title) +
+    theme_void()
+  
+  if(!is.null(file)) pdf(file, width=6, height=6); print(p); if(!is.null(file)) dev.off()
+  return(p)
+}
+
+freq_general$Var1 <- factor(freq_general$symptom_column,levels = freq_general$symptom_column)
+p = plot_pie(freq_general, "General Symptoms", file = "plots/pie_generalsymptoms.pdf")
+pdf("plots/pie_generalsymptoms.pdf")
+p
+dev.off()
+
+neuromuscular_freq <- as.data.frame(table(c(EARLY_AllAnswers_new[EARLY_AllAnswers_new$symptom_general_PL == "neuro-motor",]$`Symptom/Syndrome_General_1`))) %>% 
+  arrange(desc(Freq))
+neuromuscular_freq$Var1 <- factor(neuromuscular_freq$Var1,levels = neuromuscular_freq$Var1)
+p = plot_pie(neuromuscular_freq, "Neuro-motor", file = "plots/pie_neuromuscular.pdf")
+pdf("plots/pie_neuromuscular.pdf")
+p
+dev.off()
+
+sensory_freq <- as.data.frame(table(c(EARLY_AllAnswers_new[EARLY_AllAnswers_new$symptom_general_PL == "Sensory and vestibular",]$`Symptom/Syndrome_General_1`))) %>% 
+  arrange(desc(Freq))
+sensory_freq$Var1 <- factor(sensory_freq$Var1,levels = sensory_freq$Var1)
+p = plot_pie(sensory_freq, "Sensory and vestibular", file = "plots/pie_sensory.pdf")
+pdf("plots/pie_sensory.pdf")
+p
+dev.off()
+
 
 # open answers CTR
 CTR_open_answers_nonmotor <- CTR_common[,grep("Bitte beschreiben Sie alle Veränderungen, die Ihnen in Bezug auf die letzten 10 Jahre einfallen.  [][Welche Veränderung?]",

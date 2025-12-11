@@ -126,9 +126,11 @@ data_use <- univar_preconditions_general %>%
   semi_join(top3,by = c("Main category", "Specific category")) %>%
   arrange(`P-value`) 
 
+data_use$`log(2.5% [OR])` = ifelse(is.na(data_use$`log(2.5% [OR])`),-Inf,data_use$`log(2.5% [OR])`)
+
 p = forest_plot_all(data_use,subcategory_bol = TRUE)
 
-pdf(file = "plots/forest_preexisting_subcat.pdf",height = 3.5,width = 8)
+pdf(file = "plots/forest_preexisting_subcat.pdf",height = 2.95,width = 7.6)
 p
 dev.off()
 
