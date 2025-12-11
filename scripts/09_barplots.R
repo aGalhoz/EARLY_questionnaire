@@ -1025,3 +1025,109 @@ plot_grid(plot_caffeine_all,plot_alcohol_all,
           labels = c("A","B","C")) 
 dev.off()
 
+# check significance for substance quantity
+substance_quantity_sig <- function(data,
+                                   status_col = "status",
+                                   group_cols = c("quantity", "type"),
+                                   count_col = "count") {
+  
+  # --- 1. Basic checks ---
+  if (!all(c(status_col, count_col, group_cols) %in% names(data))) {
+    stop("One or more column names supplied do not exist in the dataset.")
+  }
+  
+  # Make sure status column has exactly 2 groups
+  groups <- unique(data[[status_col]])
+  if (length(groups) != 2) stop("Status column must contain exactly two groups.")
+  g1 <- groups[1]
+  g2 <- groups[2]
+  
+  # --- 2. Pivot to wide ---
+  wide <- data %>%
+    dplyr::select(all_of(c(group_cols, status_col, count_col))) %>%
+    dplyr::mutate(across(all_of(status_col), as.character)) %>%
+    pivot_wider(
+      names_from = all_of(status_col),
+      values_from = all_of(count_col),
+      values_fill = 0
+    )
+  
+  # --- 3. Compute OR row by row ---
+  out <- lapply(seq_len(nrow(wide)), function(i) {
+    a <- wide[[g1]][i]
+    c_val <- wide[[g2]][i]
+    
+    # Select the grouping variables for this row excluding 'quantity'
+    row_group <- wide[i, group_cols[group_cols != "quantity"], drop = FALSE]
+    
+    # Compute totals for each status **within the same grouping (excluding quantity)**
+    total_g1 <- data %>%
+      filter(.data[[status_col]] == g1) %>%
+      filter(across(all_of(group_cols[group_cols != "quantity"]), 
+                    ~ . == row_group[[cur_column()]])) %>%
+      dplyr::summarise(total = sum(.data[[count_col]]), .groups = "drop") %>% pull(total)
+    
+    total_g2 <- data %>%
+      filter(.data[[status_col]] == g2) %>%
+      filter(across(all_of(group_cols[group_cols != "quantity"]), 
+                    ~ . == row_group[[cur_column()]])) %>%
+      dplyr::summarise(total = sum(.data[[count_col]]), .groups = "drop") %>% pull(total)
+    
+    b <- total_g1 - a
+    d <- total_g2 - c_val
+    
+    # Create 2x2 table and run Fisher's Exact Test
+    tbl <- matrix(c(a, b, c_val, d), nrow = 2, byrow = TRUE)
+    ft <- fisher.test(tbl)
+    
+    c(
+      odds_ratio = unname(ft$estimate),
+      conf_low  = ft$conf.int[1],
+      conf_high = ft$conf.int[2],
+      p_value   = ft$p.value
+    )
+  })
+  
+  out_df <- do.call(rbind, out) |> as.data.frame()
+  
+  # --- 4. Bind grouping variables + results ---
+  final <- cbind(
+    wide[group_cols],
+    out_df
+  )
+  
+  return(final)
+}
+
+# alcohol 
+sign_alcohol_quantity = substance_quantity_sig(freq_alcohol_dist_all)
+sign_alcohol_quantity_gender = substance_quantity_sig(freq_alcohol_dist %>% ungroup(),
+                                                      status_col = "status",
+                                                      group_cols = c("quantity", "type","sex"),
+                                                      count_col = "count")
+writexl::write_xlsx(sign_alcohol_quantity,"data code output/sign_alcohol_quantity.xlsx")
+writexl::write_xlsx(sign_alcohol_quantity_gender,"data code output/sign_alcohol_quantity_gender.xlsx")
+
+# smoke 
+sign_smoke_quantity = substance_quantity_sig(freq_smoke_dist_all)
+sign_smoke_quantity_gender = substance_quantity_sig(freq_smoke_dist %>% ungroup(),
+                                                      status_col = "status",
+                                                      group_cols = c("quantity", "type","sex"),
+                                                      count_col = "count")
+
+writexl::write_xlsx(sign_smoke_quantity,"data code output/sign_smoke_quantity.xlsx")
+writexl::write_xlsx(sign_smoke_quantity_gender,"data code output/sign_smoke_quantity_gender.xlsx")
+
+# coffee 
+sign_coffee_quantity = substance_quantity_sig(freq_coffee_dist_all)
+sign_coffee_quantity_gender = substance_quantity_sig(freq_coffee_dist %>% 
+                                                       group_by(status,sex,quantity,type) %>%
+                                                       dplyr::summarise(count = sum(count, na.rm = TRUE), .groups = "drop"),
+                                                    status_col = "status",
+                                                    group_cols = c("quantity", "type","sex"),
+                                                    count_col = "count")
+
+writexl::write_xlsx(sign_coffee_quantity,"data code output/sign_coffee_quantity.xlsx")
+writexl::write_xlsx(sign_coffee_quantity_gender,"data code output/sign_coffee_quantity_gender.xlsx")
+
+
