@@ -120,6 +120,7 @@ years_since_onset <- ifelse(is.na(spinal_bulbar$spinal_or_bulbar),NA,
                             ifelse(spinal_bulbar$spinal_or_bulbar == "spinal",
                                    floor(spinal_bulbar$diff_spinal/12),
                                    floor(spinal_bulbar$diff_bulbar/12)))
+compute_summary(years_since_onset,"years since onset")
 spinal_bulbar$years_since_onset = years_since_onset
 birth <- format(as.Date(paste("01",
                               ALS_common$`Bitte geben Sie Ihren Geburtsmonat und das Geburtsjahr an.`,
@@ -207,7 +208,7 @@ t.test(na.omit(age_female),na.omit(age_male))
 
 age_CTR_ALS <- rbind(data.frame(type = "CTR",age = age_CTR),
                      data.frame(type = "ALS",age = age))
-age_CTR_ALS_stats <- t.test(age ~ type, data = age_CTR_ALS)
+age_CTR_ALS_stats <- wilcox.test(age ~ type, data = age_CTR_ALS)
 pdf("plots/age_ALS_vs_CTR.pdf")
 ggplot(age_CTR_ALS, aes(x=age, fill = type)) + 
   geom_histogram(alpha = .5, bins = 30, position = "identity") + 

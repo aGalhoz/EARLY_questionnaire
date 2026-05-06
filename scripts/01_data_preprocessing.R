@@ -235,10 +235,13 @@ tmp_pat <- safe_left_join(
   by = "Patienten_Token_TEAR"
 )
 
+
+tmp_pat_ordered <- tmp_pat[match(data_patients_new_2024$Zugangscode, tmp_pat$Zugangscode), ]
+
 data_patients_new_2024$`Bitte geben Sie Ihren Geburtsmonat und das Geburtsjahr an.` <-
   apply_dob(
     df_old = data_patients_new_2024,
-    df_new = tmp_pat,
+    df_new = tmp_pat_ordered,
     dob_col_original = "Bitte geben Sie Ihren Geburtsmonat und das Geburtsjahr an.",
     dob_col_new = "DOB_pat_TEAR"
   )
@@ -256,10 +259,12 @@ tmp_ctr <- safe_left_join(
   by = "Angehörige_Token_TEAR"
 )
 
+tmp_ctr_ordered <- tmp_ctr[match(data_patients_new_2024$Zugangscode, tmp_ctr$Zugangscode), ]
+
 data_control_new_2024$`Bitte geben Sie Ihren Geburtsmonat und das Geburtsjahr an.` <-
   apply_dob(
     df_old = data_control_new_2024,
-    df_new = tmp_ctr,
+    df_new = tmp_ctr_ordered,
     dob_col_original = "Bitte geben Sie Ihren Geburtsmonat und das Geburtsjahr an.",
     dob_col_new = "DOB_ctr_TEAR"
   )
@@ -342,8 +347,10 @@ pat_tmp$DOB_Pat_clean[pat_tmp$`Antwort ID` == 540] <- "01.01.1956"
 
 pat_tmp$DOB_Pat_clean <- format(as.Date(pat_tmp$DOB_Pat_clean, "%d.%m.%Y"), "%m/%Y")
 
+pat_tmp_ordered <- pat_tmp[match(data_patients_new_2024$Zugangscode, pat_tmp$Zugangscode), ]
+
 data_patients_new_2024$`Bitte geben Sie Ihren Geburtsmonat und das Geburtsjahr an.` <-
-  apply_dob(data_patients_new_2024, pat_tmp,
+  apply_dob(data_patients_new_2024, pat_tmp_ordered,
             "Bitte geben Sie Ihren Geburtsmonat und das Geburtsjahr an.",
             "DOB_Pat_clean")
 
