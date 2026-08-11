@@ -248,7 +248,7 @@ data_patients_new_2024$`Bitte geben Sie Ihren Geburtsmonat und das Geburtsjahr a
 
 tmp_ctr <- safe_left_join(
   data_control_new_2024,
-  Tokens_EARLY_TEAR[, c("Angehörige_Token_EARLY", "Angehörige_Token_TEAR", "Patienten_ID")] %>%
+  Tokens_EARLY_TEAR[, c("Angehörige_Token_EARLY", "Angehörige_Token_TEAR", "Angehörige_ID")] %>%
     dplyr::rename(Zugangscode = Angehörige_Token_EARLY),
   by = "Zugangscode"
 )
@@ -320,14 +320,17 @@ ctr_tmp <- safe_left_join(
 
 ctr_tmp$DOB_Angehoerige_clean <- format(as.Date(ctr_tmp$DOB_Angehoerige_clean, "%d.%m.%Y"), "%m/%Y")
 
+ctr_tmp_ordered = ctr_tmp[match(data_control_new_2024$Zugangscode, ctr_tmp$Zugangscode), ]
+
 data_control_new_2024$`Bitte geben Sie Ihren Geburtsmonat und das Geburtsjahr an.` <-
-  apply_dob(data_control_new_2024, ctr_tmp,
+  apply_dob(data_control_new_2024, ctr_tmp_ordered,
             "Bitte geben Sie Ihren Geburtsmonat und das Geburtsjahr an.",
             "DOB_Angehoerige_clean")
 
 ### Patients
 pat_tmp <- safe_left_join(
-  data_patients_new_2024,
+  data_patients_new_2024 %>%
+    select(`Antwort ID`,Zugangscode),
   Tokens_EARLY_TEAR[, c("Patienten_Token_EARLY", "Patienten_ID")] %>%
     dplyr::rename(Zugangscode = Patienten_Token_EARLY),
   by = "Zugangscode"
@@ -340,10 +343,38 @@ pat_tmp <- safe_left_join(
   by = "Patienten_ID"
 )
 
-# manual overwrites preserved
-pat_tmp$DOB_Pat_clean[pat_tmp$`Antwort ID` == 610] <- "01.01.1973"
-pat_tmp$DOB_Pat_clean[pat_tmp$`Antwort ID` == 590] <- "01.01.1974"
-pat_tmp$DOB_Pat_clean[pat_tmp$`Antwort ID` == 540] <- "01.01.1956"
+pat_tmp$DOB_Pat_clean <- format(as.Date(pat_tmp$DOB_Pat_clean, "%d.%m.%Y"), "%m/%Y")
+
+pat_tmp_ordered <- pat_tmp[match(data_patients_new_2024$Zugangscode, pat_tmp$Zugangscode), ]
+
+data_patients_new_2024$`Bitte geben Sie Ihren Geburtsmonat und das Geburtsjahr an.` <-
+  apply_dob(data_patients_new_2024, pat_tmp_ordered,
+            "Bitte geben Sie Ihren Geburtsmonat und das Geburtsjahr an.",
+            "DOB_Pat_clean") 
+
+#######################################################################
+### Check if we manage to get more dates with new ID lists
+Tokens_EARLY_new <-  read_excel("data input/Teilnehmerliste_FINAL.xlsx") %>%
+  select(tokenearlypatient,tokenearlyangehoerige,patientid)
+Tokens_final_list_new <- read_excel("data input/Final_tokens.xlsx")
+
+# patients
+pat_tmp <- safe_left_join(
+  data_patients_new_2024 %>% 
+    select(Zugangscode,
+           `Bitte geben Sie Ihren Geburtsmonat und das Geburtsjahr an.`),
+  Tokens_EARLY_new %>%
+    select(tokenearlypatient,patientid) %>%
+    dplyr::rename(Zugangscode = tokenearlypatient),
+  by = "Zugangscode"
+)
+
+pat_tmp <- safe_left_join(
+  pat_tmp,
+  DOB_dates_new[, c("Patienten_Probanden_ID", "DOB_Pat_clean")] %>%
+    dplyr::rename(patientid = Patienten_Probanden_ID),
+  by = "patientid"
+)
 
 pat_tmp$DOB_Pat_clean <- format(as.Date(pat_tmp$DOB_Pat_clean, "%d.%m.%Y"), "%m/%Y")
 
@@ -352,7 +383,141 @@ pat_tmp_ordered <- pat_tmp[match(data_patients_new_2024$Zugangscode, pat_tmp$Zug
 data_patients_new_2024$`Bitte geben Sie Ihren Geburtsmonat und das Geburtsjahr an.` <-
   apply_dob(data_patients_new_2024, pat_tmp_ordered,
             "Bitte geben Sie Ihren Geburtsmonat und das Geburtsjahr an.",
-            "DOB_Pat_clean")
+            "DOB_Pat_clean") 
+
+# controls
+ctr_tmp <- safe_left_join(
+  data_control_new_2024 %>% 
+    select(Zugangscode,
+           `Bitte geben Sie Ihren Geburtsmonat und das Geburtsjahr an.`),
+  Tokens_EARLY_new %>%
+    select(tokenearlyangehoerige,patientid) %>%
+    dplyr::rename(Zugangscode = tokenearlyangehoerige),
+  by = "Zugangscode"
+)
+
+ctr_tmp <- safe_left_join(
+  ctr_tmp,
+  DOB_dates_new[, c("Patienten_Probanden_ID", "DOB_Angehoerige_clean")] %>%
+    dplyr::rename(patientid = Patienten_Probanden_ID),
+  by = "patientid"
+)
+
+ctr_tmp$DOB_Angehoerige_clean <- format(as.Date(ctr_tmp$DOB_Angehoerige_clean, "%d.%m.%Y"), "%m/%Y")
+
+ctr_tmp_ordered <- ctr_tmp[match(data_control_new_2024$Zugangscode, ctr_tmp$Zugangscode), ]
+
+data_control_new_2024$`Bitte geben Sie Ihren Geburtsmonat und das Geburtsjahr an.` <-
+  apply_dob(data_control_new_2024, ctr_tmp_ordered,
+            "Bitte geben Sie Ihren Geburtsmonat und das Geburtsjahr an.",
+            "DOB_Angehoerige_clean") 
+
+#########################################################################
+### new dates from May 2026 & define ages of Erlangen as birth dates
+Dates_new_Grehl <- read_excel("data input/Dates_new_Grehl.xlsx")
+Dates_new_Agatharied <- read_excel("data input/Dates_new_Agatharied.xlsx")
+Dates_new_Erlangen <- read_excel("data input/Dates_new_Erlangen.xlsx")
+
+Dates_new_Grehl[Dates_new_Grehl$`Patienten/Probanden ID` == "16208",]$`DOB Patient` = as.Date("1943-12-07")
+dates_new = do.call("rbind",list(Dates_new_Grehl,
+                                 Dates_new_Agatharied,
+                                 Dates_new_Erlangen)) %>%
+  select(`Patienten/Probanden ID`,`DOB Patient`) %>%
+  dplyr::rename(Patienten_Probanden_ID = `Patienten/Probanden ID`,
+         DOB_Pat_clean = `DOB Patient`)
+
+pat_tmp <- safe_left_join(
+  data_patients_new_2024 %>% 
+    select(Zugangscode,
+           `Bitte geben Sie Ihren Geburtsmonat und das Geburtsjahr an.`),
+  Tokens_EARLY_new %>%
+    select(tokenearlypatient,patientid) %>%
+    dplyr::rename(Zugangscode = tokenearlypatient),
+  by = "Zugangscode"
+)
+
+pat_tmp <- safe_left_join(
+  pat_tmp,
+  dates_new[, c("Patienten_Probanden_ID", "DOB_Pat_clean")] %>%
+    dplyr::rename(patientid = Patienten_Probanden_ID),
+  by = "patientid"
+)
+
+pat_tmp$DOB_Pat_clean <- format(as.Date(pat_tmp$DOB_Pat_clean, "%d.%m.%Y"), "%m/%Y")
+
+pat_tmp_ordered <- pat_tmp[match(data_patients_new_2024$Zugangscode, pat_tmp$Zugangscode), ]
+
+data_patients_new_2024$`Bitte geben Sie Ihren Geburtsmonat und das Geburtsjahr an.` <-
+  apply_dob(data_patients_new_2024, pat_tmp_ordered,
+            "Bitte geben Sie Ihren Geburtsmonat und das Geburtsjahr an.",
+            "DOB_Pat_clean") 
+
+#########################################################################
+### new dates from June 2026 
+Dates_new_TUM_Krupp <- read_excel("data input/Dates_new_TUM_Krupp.xlsx")
+Dates_new_Gallen <- read_excel("data input/Dates_new_Gallen.xlsx")
+
+dates_new = do.call("rbind",list(Dates_new_TUM_Krupp,
+                                 Dates_new_Gallen)) %>%
+  select(`Patienten/Probanden ID`,`DOB Patient`,`DOB Angehöriger`) %>%
+  dplyr::rename(Patienten_Probanden_ID = `Patienten/Probanden ID`,
+                DOB_Pat_clean = `DOB Patient`,
+                DOB_Angehoerige_clean = `DOB Angehöriger`)
+
+pat_tmp <- safe_left_join(
+  data_patients_new_2024 %>% 
+    select(Zugangscode,
+           `Bitte geben Sie Ihren Geburtsmonat und das Geburtsjahr an.`),
+  Tokens_EARLY_new %>%
+    select(tokenearlypatient,patientid) %>%
+    dplyr::rename(Zugangscode = tokenearlypatient),
+  by = "Zugangscode"
+)
+
+pat_tmp <- safe_left_join(
+  pat_tmp,
+  dates_new[, c("Patienten_Probanden_ID", "DOB_Pat_clean")] %>%
+    dplyr::rename(patientid = Patienten_Probanden_ID),
+  by = "patientid"
+)
+
+pat_tmp$DOB_Pat_clean <- format(as.Date(pat_tmp$DOB_Pat_clean, "%d.%m.%Y"), "%m/%Y")
+
+pat_tmp_ordered <- pat_tmp[match(data_patients_new_2024$Zugangscode, pat_tmp$Zugangscode), ]
+
+data_patients_new_2024$`Bitte geben Sie Ihren Geburtsmonat und das Geburtsjahr an.` <-
+  apply_dob(data_patients_new_2024, pat_tmp_ordered,
+            "Bitte geben Sie Ihren Geburtsmonat und das Geburtsjahr an.",
+            "DOB_Pat_clean") 
+
+# controls
+ctr_tmp <- safe_left_join(
+  data_control_new_2024 %>% 
+    select(Zugangscode,
+           `Bitte geben Sie Ihren Geburtsmonat und das Geburtsjahr an.`),
+  Tokens_EARLY_new %>%
+    select(tokenearlyangehoerige,patientid) %>%
+    dplyr::rename(Zugangscode = tokenearlyangehoerige),
+  by = "Zugangscode"
+)
+
+ctr_tmp <- safe_left_join(
+  ctr_tmp,
+  dates_new[, c("Patienten_Probanden_ID", "DOB_Angehoerige_clean")] %>%
+    dplyr::rename(patientid = Patienten_Probanden_ID),
+  by = "patientid"
+)
+
+ctr_tmp$DOB_Angehoerige_clean <- format(as.Date(ctr_tmp$DOB_Angehoerige_clean, "%d.%m.%Y"), "%m/%Y")
+
+ctr_tmp_ordered <- ctr_tmp[match(data_control_new_2024$Zugangscode, ctr_tmp$Zugangscode), ]
+
+data_control_new_2024$`Bitte geben Sie Ihren Geburtsmonat und das Geburtsjahr an.` <-
+  apply_dob(data_control_new_2024, ctr_tmp_ordered,
+            "Bitte geben Sie Ihren Geburtsmonat und das Geburtsjahr an.",
+            "DOB_Angehoerige_clean") 
+
+
 
 #######################################################################
 # 7. Get patients with ALS & controls related to those patients
@@ -360,8 +525,81 @@ data_patients_new <- data_patients_new_2024 %>%
   filter(`Welche Diagnose wurde bei Ihnen gestellt? ` == "Amyotrophe Lateralsklerose (ALS)")
 data_patients_new <- data_patients_new[c(1:6,8:514),]  # 513 ALS patients
 
+tmp_patients = data_patients_new %>%
+  filter(!is.na(`Datum Abgeschickt`)) %>%
+  select(Zugangscode,`Bitte geben Sie Ihren Geburtsmonat und das Geburtsjahr an.`)
+
+tmp_ALS_without_birth = tmp_patients %>%
+  left_join(Tokens_EARLY_new %>%
+              select(tokenearlypatient,patientid) %>%
+              dplyr::rename(Zugangscode = tokenearlypatient)) %>%
+  left_join(Tokens_final_list_new %>%
+              select(`Token EARLY Pat`,Zentrum) %>%
+              dplyr::rename(Zugangscode = `Token EARLY Pat`)) %>%
+  filter(is.na(`Bitte geben Sie Ihren Geburtsmonat und das Geburtsjahr an.`)) %>%
+  arrange(Zentrum)
+
+writexl::write_xlsx(tmp_ALS_without_birth,"data code output/ALS_without_birth.xlsx")
+
 data_control_new <- data_control_new_2024[data_control_new_2024$Zugangscode %in% data_patients_new$Zugangscode,] 
 data_control_new <- data_control_new[c(1:5,7:306),] # 305 CTR patients, there is another repetitive control but has different answers
+
+tmp_controls = data_control_new_2024 %>%
+  filter(!is.na(`Datum Abgeschickt`)) %>%
+  select(Zugangscode,`Bitte geben Sie Ihren Geburtsmonat und das Geburtsjahr an.`)
+
+tmp_CTR_without_birth = tmp_controls %>%
+  left_join(Tokens_EARLY_new %>%
+              select(tokenearlyangehoerige,patientid) %>%
+              dplyr::rename(Zugangscode = tokenearlyangehoerige)) %>%
+  left_join(Tokens_final_list_new %>%
+              select(`Token EARLY Ang`,Zentrum) %>%
+              dplyr::rename(Zugangscode = `Token EARLY Ang`)) %>%
+  filter(is.na(`Bitte geben Sie Ihren Geburtsmonat und das Geburtsjahr an.`)) %>%
+  arrange(Zentrum)
+
+writexl::write_xlsx(tmp_CTR_without_birth,"data code output/CTR_without_birth.xlsx")
+
+# put together all the ones (ALS and CTR) missing
+tmp_ALS_birth = tmp_patients %>%
+  left_join(Tokens_EARLY_new %>%
+              select(tokenearlypatient,patientid) %>%
+              dplyr::rename(Zugangscode = tokenearlypatient)) %>%
+  left_join(Tokens_final_list_new %>%
+              select(`Token EARLY Pat`,Zentrum) %>%
+              dplyr::rename(Zugangscode = `Token EARLY Pat`)) %>%
+  dplyr::rename(DOB_Pat = `Bitte geben Sie Ihren Geburtsmonat und das Geburtsjahr an.`,
+         Patienten_Probanden_ID = patientid,
+         Center = Zentrum)
+
+tmp_CTR_birth = data_control_new %>%
+  filter(!is.na(`Datum Abgeschickt`)) %>%
+  select(Zugangscode,`Bitte geben Sie Ihren Geburtsmonat und das Geburtsjahr an.`) %>%
+  left_join(Tokens_EARLY_new %>%
+              select(tokenearlyangehoerige,patientid) %>%
+              dplyr::rename(Zugangscode = tokenearlyangehoerige)) %>%
+  left_join(Tokens_final_list_new %>%
+              select(`Token EARLY Ang`,Zentrum) %>%
+              dplyr::rename(Zugangscode = `Token EARLY Ang`)) %>%
+  dplyr::rename(DOB_Angehoerige = `Bitte geben Sie Ihren Geburtsmonat und das Geburtsjahr an.`,
+                Patienten_Probanden_ID = patientid,
+                Center = Zentrum)
+
+tmp_IDs_without_birth = full_join(tmp_ALS_birth,
+                                  tmp_CTR_birth,by = c("Zugangscode","Center")) %>%
+  filter(is.na(DOB_Pat) | is.na(DOB_Angehoerige)) %>%
+  filter(!(is.na(DOB_Angehoerige) & is.na(Patienten_Probanden_ID.y) & !is.na(DOB_Pat))) %>%
+  arrange(Center) %>%
+  mutate(Patienten_Probanden_ID = Patienten_Probanden_ID.x) %>%
+  select(Center,Patienten_Probanden_ID,DOB_Pat,DOB_Angehoerige,Zugangscode) %>%
+  filter(!is.na(Patienten_Probanden_ID))
+
+writexl::write_xlsx(tmp_IDs_without_birth,"data code output/IDs_without_birth.xlsx")
+
+tmp_IDs_without_birth$Center %>% unique 
+DOB_dates_new$Center %>% unique()
+
+tmp_IDs_without_birth[tmp_IDs_without_birth$Patienten_Probanden_ID %in% DOB_dates_new$Patienten_Probanden_ID,]
 
 #######################################################################
 # 7. Identify ALS / CTR datasets and keep only completed entries

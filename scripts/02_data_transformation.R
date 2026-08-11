@@ -69,6 +69,8 @@ data_control_temp$status <- 0
 colnames(data_control_temp) <- colnames(data_patients_temp)
 
 data_combined <- rbind(data_patients_temp, data_control_temp)
+zugangscode_combined = rbind(data_patients_temp, data_control_temp) %>%
+  select(Zugangscode,status)
 
 # Identify start year for date-time calculations
 start_year <- format(as.Date(data_combined$`Datum gestartet`, "%Y-%m-%d"), "%Y")

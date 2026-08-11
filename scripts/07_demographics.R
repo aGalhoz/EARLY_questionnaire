@@ -45,22 +45,49 @@ first_symptom <- final_ALS_stats %>%
 data_first_symptom <- ALS_specific[,c(which(colnames(ALS_specific) %in% first_symptom$`original question (ALS)`))]
 data_first_symptom <- apply(data_first_symptom, 2, function(x) format(as.Date(paste("01",x,sep="/"),"%d/%m/%Y"),"%d/%m/%Y"))
 date_questionnaire <- format(as.Date(ALS_common$`Datum letzte Aktivität`,format = "%Y-%m-%d"),"%d/%m/%Y")
+birth_date =  format(as.Date(paste("01",ALS_common$`Bitte geben Sie Ihren Geburtsmonat und das Geburtsjahr an.`,sep="/"),
+                             "%d/%m/%Y"),"%d/%m/%Y")
 diff_date <- apply(data_first_symptom, 2, function(x)  {
   (difftime(strptime(date_questionnaire, format = "%d/%m/%Y"),strptime(x, format = "%d/%m/%Y"))/365)*12})
+diff_date_birth <- apply(data_first_symptom, 2, function(x)  {
+  (difftime(strptime(birth_date, format = "%d/%m/%Y"),strptime(x, format = "%d/%m/%Y"))/365)*12})
+Mode <- function(x) {
+  ux <- unique(x)
+  ux[which.max(tabulate(match(x, ux)))]
+}
 diff_date_oldest <- apply(diff_date,1,function(x) {
   # remove ages that don't make sense like 1920, 1921, etc.
- # x <- na.omit(x[x<1200])
-  ceiling(max(na.omit(x)))
+  x <- x[x < 400]
+  ceiling(max((na.omit(x))))
 })
 
-View(data_first_symptom[which(diff_date_oldest== "-Inf"),]) ## 22 several with NA 
-View(ALS_common[which(diff_date_oldest== "-Inf"),])
+skim(diff_date_oldest[diff_date_oldest!=(-Inf)])
 
-ALS_progression <- (patient_ALS_FRS_R$ALSFRSR - 48)/diff_date_oldest 
+ALS_progression <- (48 - patient_ALS_FRS_R$ALSFRSR)/diff_date_oldest 
+patient_ALS_progression = data.frame(ID = patient_ALS_FRS_R$ID,
+                                     ALS_progression = ALS_progression)
 
-ALS_progression_stats <- skim(ALS_progression[diff_date_oldest!=(-Inf)]) # 479 
-n_slow_progressor <- skim(ALS_progression[ALS_progression < ALS_progression_stats$numeric.p50 & diff_date_oldest!=(-Inf)]) # 228
-n_fast_progressor <- skim(ALS_progression[ALS_progression >= ALS_progression_stats$numeric.p50 & diff_date_oldest!=(-Inf)]) # 223 
+ALS_progression_stats <- skim(patient_ALS_progression[diff_date_oldest!=(-Inf),]$ALS_progression) # 479 
+ALS_progression_tmp = patient_ALS_progression[diff_date_oldest!=(-Inf),] # 453
+n_slow_progressor <- skim(ALS_progression_tmp[ALS_progression_tmp$ALS_progression < ALS_progression_stats$numeric.p50,]$ALS_progression) # 226
+n_fast_progressor <- skim(ALS_progression_tmp[ALS_progression_tmp$ALS_progression >= ALS_progression_stats$numeric.p50,]$ALS_progression) # 227
+
+tertiles = quantile(ALS_progression_tmp$ALS_progression,probs = c(0.33,0.66))
+low_cut = tertiles[1]
+high_cut = tertiles[2]
+
+progression_group <- cut(
+  ALS_progression_tmp$ALS_progression,
+  breaks = c(-Inf, low_cut, high_cut, Inf),
+  labels = c("slow", "intermediate", "fast"),
+  right = TRUE
+)
+
+ALS_progression_tmp_grouped <- data.frame(
+  ALS_progression = ALS_progression_tmp,
+  group = progression_group
+)
+
 
 # spinal & bulbar 
 spinal <- final_ALS_stats %>%
@@ -130,7 +157,7 @@ age <- floor(as.numeric(difftime(strptime(date_questionnaire, format = "%d/%m/%Y
                                  strptime(birth, format = "%d/%m/%Y"))/365))
 
 age_onset <- age - years_since_onset
-age_onset_stats <- skim(age_onset) # 247 missing 
+age_onset_stats <- skim(age_onset) # 99 missing 
 
 # ALS subtype
 data_ALS_subtype <- ALS_specific[,"Welcher ALS-Subtyp besteht bei Ihnen?"] %>% as_tibble()
@@ -210,10 +237,15 @@ age_CTR_ALS <- rbind(data.frame(type = "CTR",age = age_CTR),
                      data.frame(type = "ALS",age = age))
 age_CTR_ALS_stats <- wilcox.test(age ~ type, data = age_CTR_ALS)
 pdf("plots/age_ALS_vs_CTR.pdf")
-ggplot(age_CTR_ALS, aes(x=age, fill = type)) + 
-  geom_histogram(alpha = .5, bins = 30, position = "identity") + 
-  theme_classic() +
-  scale_fill_manual(values=c("ALS"="#0073C2FF","CTR"="#EFC000FF")) 
+ggplot(age_CTR_ALS, aes(x = age, y = after_stat(density), fill = type)) +
+  geom_histogram(alpha = 0.5, position = "identity", binwidth = 5) +
+  geom_density(aes(color = type), linewidth = 0.7, fill = NA) +
+  scale_fill_manual(values = c("ALS" = "#D85A30", "CTR" = "#378ADD"),
+                    labels = c(paste0("ALS (n=", length(na.omit(age)), ")"),
+                               paste0("CTR (n=", length(na.omit(age_CTR)), ")"))) +
+  scale_color_manual(values = c("ALS" = "#D85A30", "CTR" = "#378ADD"), guide = "none") +
+  labs(x = "Age (years)", y = "Density", fill = NULL) +
+  theme_minimal()
 dev.off()
 # variables are not normal, so using Mann-Whitney test
 als_ages <- na.omit(age)
